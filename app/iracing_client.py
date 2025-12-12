@@ -167,25 +167,8 @@ class IRacingClient:
         await self._client.aclose()
 
 
-def parse_license(raw: str | None) -> tuple[str | None, float | None]:
-    """Parse license string into class and safety rating."""
-    if not raw:
-        return None, None
-    parts = raw.split()
-    if len(parts) >= 2:
-        license_class = parts[0]
-        try:
-            license_sr = float(parts[1])
-        except ValueError:
-            return license_class, None
-        return license_class, license_sr
-    return raw, None
-
-
 def normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
     """Extract typed fields from a CSV row with parsed values."""
-
-    license_class, license_sr = parse_license(row.get("CLASS"))
 
     def parse_int(key: str) -> int | None:
         try:
@@ -193,23 +176,13 @@ def normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
         except (TypeError, ValueError):
             return None
 
-    def parse_float(key: str) -> float | None:
-        try:
-            return float(row.get(key, ""))
-        except (TypeError, ValueError):
-            return None
-
     return {
         "cust_id": parse_int("CUSTID"),
         "display_name": row.get("DRIVER"),
+        "location": row.get("LOCATION"),
         "irating": parse_int("IRATING"),
-        "ttrating": parse_int("TTRATING"),
-        "license_class": license_class,
-        "license_sr": license_sr,
         "starts": parse_int("STARTS"),
         "wins": parse_int("WINS"),
-        "avg_inc": parse_float("AVG_INC"),
-        "raw": row,
     }
 
 

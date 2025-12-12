@@ -47,7 +47,11 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
         fetched_at = datetime.now(timezone.utc)
         with get_session() as session:
             members = [
-                (item["cust_id"], item.get("display_name"))
+                (
+                    item["cust_id"],
+                    item.get("display_name"),
+                    item.get("location"),
+                )
                 for item in normalized
                 if item.get("cust_id")
             ]
@@ -63,14 +67,9 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
                     category=cat,
                     snapshot_date=snapshot_day,
                     fetched_at=fetched_at,
-                    stats_json=item.get("raw"),
                     irating=item.get("irating"),
-                    license_class=item.get("license_class"),
-                    license_sr=item.get("license_sr"),
-                    ttrating=item.get("ttrating"),
                     starts=item.get("starts"),
                     wins=item.get("wins"),
-                    avg_inc=item.get("avg_inc"),
                 )
                 stored += 1
             counts[cat] = stored

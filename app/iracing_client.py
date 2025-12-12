@@ -135,6 +135,19 @@ class IRacingClient:
                 await asyncio.sleep(2 ** attempt)
         raise RuntimeError("Failed to fetch after retries")
 
+    async def _unauthorized_get(self, url: str) -> httpx.Response:
+        for attempt in range(3):
+            try:
+                await self._throttle()
+                resp = await self._client.get(url)
+                resp.raise_for_status()
+                return resp
+            except Exception:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(2 ** attempt)
+        raise RuntimeError("Failed to fetch after retries")
+
     async def fetch_category_csv(self, category: str) -> List[Dict[str, Any]]:
         """Fetch and parse category CSV, returning list of dict rows."""
         data_url = DATA_URL_TEMPLATE.format(category=category)
@@ -142,7 +155,7 @@ class IRacingClient:
         link = category_resp.json().get("link")
         if not link:
             raise RuntimeError("Missing CSV link in response")
-        csv_resp = await self._authorized_get(link)
+        csv_resp = await self._unauthorized_get(link)
         rows: List[Dict[str, Any]] = []
         decoded = csv_resp.text
         reader = csv.DictReader(decoded.splitlines())

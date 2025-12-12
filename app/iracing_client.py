@@ -6,7 +6,7 @@ import csv
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, Iterator
 
 import httpx
 
@@ -148,20 +148,18 @@ class IRacingClient:
                 await asyncio.sleep(2 ** attempt)
         raise RuntimeError("Failed to fetch after retries")
 
-    async def fetch_category_csv(self, category: str) -> List[Dict[str, Any]]:
-        """Fetch and parse category CSV, returning list of dict rows."""
+    async def fetch_category_csv(self, category: str) -> Iterable[Dict[str, Any]]:
+        """Fetch and parse category CSV, yielding dict rows."""
         data_url = DATA_URL_TEMPLATE.format(category=category)
         category_resp = await self._authorized_get(data_url)
         link = category_resp.json().get("link")
         if not link:
             raise RuntimeError("Missing CSV link in response")
         csv_resp = await self._unauthorized_get(link)
-        rows: List[Dict[str, Any]] = []
         decoded = csv_resp.text
         reader = csv.DictReader(decoded.splitlines())
         for row in reader:
-            rows.append(row)
-        return rows
+            yield row
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -186,10 +184,8 @@ def normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def normalize_rows(rows: Iterable[Dict[str, Any]]) -> Iterator[Dict[str, Any]]:
     """Normalize a collection of CSV rows without filtering by cust_id."""
 
-    normalized: List[Dict[str, Any]] = []
     for row in rows:
-        normalized.append(normalize_row(row))
-    return normalized
+        yield normalize_row(row)

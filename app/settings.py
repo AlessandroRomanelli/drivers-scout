@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     app_name: str = Field("drivers-scout", description="Service name for logging")
     log_level: str = Field("INFO", description="Log level")
+    log_file: Path = Field(Path("drivers-scout.log"), description="File path for log output")
     host: str = Field("0.0.0.0", description="Host for the HTTP server")
     port: int = Field(8000, description="Port for the HTTP server")
 

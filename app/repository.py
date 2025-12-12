@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Iterable, Sequence, Tuple
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -14,29 +14,35 @@ from .models import Member, MemberStatsSnapshot
 def ensure_members(session: Session, members: Iterable[int | Tuple[int, str | None]]) -> None:
     """Ensure Member records exist for provided cust_ids with optional names."""
 
-    member_records: list[Tuple[int, str | None]] = []
+    member_records: dict[int, str | None] = {}
     for item in members:
         if isinstance(item, tuple):
             cust_id, display_name = item
         else:
             cust_id, display_name = int(item), None
-        member_records.append((cust_id, display_name))
+
+        # Favor the latest non-empty display name for each cust_id
+        if cust_id not in member_records or display_name:
+            member_records[cust_id] = display_name
 
     if not member_records:
         return
 
-    cust_ids = [cust_id for cust_id, _ in member_records]
-    existing_ids = {
-        row[0]
-        for row in session.execute(select(Member.cust_id).where(Member.cust_id.in_(cust_ids)))
-    }
-    for cust_id, display_name in member_records:
-        if cust_id not in existing_ids:
-            session.add(Member(cust_id=cust_id, display_name=display_name))
-        elif display_name:
-            member = session.get(Member, cust_id)
-            if member and member.display_name != display_name:
-                member.display_name = display_name
+    def chunks(items: list[tuple[int, str | None]], size: int = 200) -> Iterable[list[tuple[int, str | None]]]:
+        for i in range(0, len(items), size):
+            yield items[i : i + size]
+
+    deduped_records = list(member_records.items())
+
+    for chunk in chunks(deduped_records):
+        stmt = sqlite_insert(Member).values(
+            [{"cust_id": cust_id, "display_name": display_name} for cust_id, display_name in chunk]
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[Member.cust_id],
+            set_={"display_name": func.coalesce(stmt.excluded.display_name, Member.display_name)},
+        )
+        session.execute(stmt)
 
 
 def upsert_snapshot(

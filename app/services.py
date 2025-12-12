@@ -12,11 +12,11 @@ from .iracing_client import IRacingClient, normalize_rows
 from .models import Base
 from .repository import (
     ensure_members,
+    bulk_upsert_snapshots,
     fetch_all_cust_ids,
     fetch_latest_snapshot,
     fetch_snapshot_on_or_before,
     fetch_snapshots_range,
-    upsert_snapshot,
 )
 from .settings import settings
 
@@ -57,21 +57,30 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
             ]
             ensure_members(session, members)
             stored = 0
+            batch: list[dict] = []
+            batch_size = 400
             for item in normalized:
                 cust_id = item.get("cust_id")
                 if cust_id is None:
                     continue
-                upsert_snapshot(
-                    session,
-                    cust_id=cust_id,
-                    category=cat,
-                    snapshot_date=snapshot_day,
-                    fetched_at=fetched_at,
-                    irating=item.get("irating"),
-                    starts=item.get("starts"),
-                    wins=item.get("wins"),
+                batch.append(
+                    {
+                        "cust_id": cust_id,
+                        "category": cat,
+                        "snapshot_date": snapshot_day,
+                        "fetched_at": fetched_at,
+                        "irating": item.get("irating"),
+                        "starts": item.get("starts"),
+                        "wins": item.get("wins"),
+                    }
                 )
-                stored += 1
+
+                if len(batch) >= batch_size:
+                    stored += bulk_upsert_snapshots(session, batch)
+                    batch.clear()
+
+            if batch:
+                stored += bulk_upsert_snapshots(session, batch)
             counts[cat] = stored
         logger.info("Stored %s snapshots for category %s", stored, cat)
 

@@ -104,6 +104,33 @@ def upsert_snapshot(
     session.execute(stmt)
 
 
+def bulk_upsert_snapshots(
+    session: Session, snapshots: Iterable[dict]
+) -> int:
+    """Insert or update multiple snapshots in a single statement."""
+
+    chunk = list(snapshots)
+    if not chunk:
+        return 0
+
+    stmt = sqlite_insert(MemberStatsSnapshot).values(chunk)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[
+            MemberStatsSnapshot.cust_id,
+            MemberStatsSnapshot.category,
+            MemberStatsSnapshot.snapshot_date,
+        ],
+        set_={
+            "fetched_at": stmt.excluded.fetched_at,
+            "irating": stmt.excluded.irating,
+            "starts": stmt.excluded.starts,
+            "wins": stmt.excluded.wins,
+        },
+    )
+    session.execute(stmt)
+    return len(chunk)
+
+
 def fetch_latest_snapshot(
     session: Session, cust_id: int, category: str
 ) -> MemberStatsSnapshot | None:

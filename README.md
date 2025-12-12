@@ -24,8 +24,9 @@ Environment variables (via `.env`):
 - `IRACING_USERNAME`, `IRACING_PASSWORD` (opaque string), `IRACING_CLIENT_SECRET`
 - `IRACING_CLIENT_ID` (default `ar-pwlimited`), `IRACING_SCOPE` (default `iracing.auth`)
 - `IRACING_RATE_LIMIT_RPM`, `RATE_LIMIT_BURST`
-- `CUST_IDS` comma-separated list of tracked users
 - `CATEGORIES` comma-separated categories (default `sports_car`)
+
+All members returned by the iRacing category CSV are ingested; no manual filtering is required.
 
 Tokens are cached in memory. Refresh is attempted when expiry nears or on 401 responses; if refresh fails, a new login is issued. The token endpoint currently accepts `grant_type=refresh_token` with the `refresh_token` plus client credentials.
 

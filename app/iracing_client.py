@@ -170,8 +170,10 @@ def parse_license(raw: str | None) -> tuple[str | None, float | None]:
 
 
 def normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract typed fields from CSV row."""
+    """Extract typed fields from a CSV row with parsed values."""
+
     license_class, license_sr = parse_license(row.get("CLASS"))
+
     def parse_int(key: str) -> int | None:
         try:
             return int(row.get(key, ""))
@@ -198,12 +200,10 @@ def normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def filter_rows(rows: Iterable[Dict[str, Any]], cust_ids: List[int]) -> List[Dict[str, Any]]:
-    """Filter parsed rows to configured cust_ids."""
-    cust_set = set(cust_ids)
-    filtered: List[Dict[str, Any]] = []
+def normalize_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize a collection of CSV rows without filtering by cust_id."""
+
+    normalized: List[Dict[str, Any]] = []
     for row in rows:
-        norm = normalize_row(row)
-        if norm["cust_id"] in cust_set:
-            filtered.append(norm)
-    return filtered
+        normalized.append(normalize_row(row))
+    return normalized

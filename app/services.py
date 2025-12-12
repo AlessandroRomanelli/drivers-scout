@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from .db import get_session
-from .iracing_client import IRacingClient, filter_rows
+from .iracing_client import IRacingClient, normalize_rows
 from .models import Base
 from .repository import (
     ensure_members,
@@ -42,15 +42,24 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
 
     async def process_category(cat: str) -> None:
         rows = await client.fetch_category_csv(cat)
-        filtered = filter_rows(rows, settings.cust_ids_normalized)
+        normalized = normalize_rows(rows)
         snapshot_day = datetime.now(tz).date()
         fetched_at = datetime.now(timezone.utc)
         with get_session() as session:
-            ensure_members(session, settings.cust_ids_normalized)
-            for item in filtered:
+            members = [
+                (item["cust_id"], item.get("display_name"))
+                for item in normalized
+                if item.get("cust_id")
+            ]
+            ensure_members(session, members)
+            stored = 0
+            for item in normalized:
+                cust_id = item.get("cust_id")
+                if cust_id is None:
+                    continue
                 upsert_snapshot(
                     session,
-                    cust_id=item["cust_id"],
+                    cust_id=cust_id,
                     category=cat,
                     snapshot_date=snapshot_day,
                     fetched_at=fetched_at,
@@ -63,8 +72,9 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
                     wins=item.get("wins"),
                     avg_inc=item.get("avg_inc"),
                 )
-            counts[cat] = len(filtered)
-        logger.info("Stored %s snapshots for category %s", len(filtered), cat)
+                stored += 1
+            counts[cat] = stored
+        logger.info("Stored %s snapshots for category %s", stored, cat)
 
     try:
         await asyncio.gather(*(process_category(cat) for cat in target_categories))
@@ -76,7 +86,7 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
 def _find_member_or_raise(cust_id: int) -> None:
     with get_session() as session:
         known_ids = fetch_all_cust_ids(session)
-    if cust_id not in known_ids and settings.cust_ids_normalized:
+    if cust_id not in known_ids:
         raise ValueError(f"cust_id {cust_id} not tracked")
 
 
@@ -132,9 +142,11 @@ def get_irating_delta(
 
 
 def get_top_growers(category: str, days: int, limit: int) -> List[Dict[str, object]]:
-    """Return top growers by iRating delta for configured members."""
+    """Return top growers by iRating delta for tracked members."""
     results: List[Dict[str, object]] = []
-    for cust_id in settings.cust_ids_normalized:
+    with get_session() as session:
+        cust_ids = fetch_all_cust_ids(session)
+    for cust_id in cust_ids:
         delta = get_irating_delta(cust_id, category, days=days)
         if delta:
             results.append(delta)

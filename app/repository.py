@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, Tuple
 
 from sqlalchemy import and_, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -11,15 +11,32 @@ from sqlalchemy.orm import Session
 from .models import Member, MemberStatsSnapshot
 
 
-def ensure_members(session: Session, cust_ids: Iterable[int]) -> None:
-    """Ensure Member records exist for provided cust_ids."""
+def ensure_members(session: Session, members: Iterable[int | Tuple[int, str | None]]) -> None:
+    """Ensure Member records exist for provided cust_ids with optional names."""
+
+    member_records: list[Tuple[int, str | None]] = []
+    for item in members:
+        if isinstance(item, tuple):
+            cust_id, display_name = item
+        else:
+            cust_id, display_name = int(item), None
+        member_records.append((cust_id, display_name))
+
+    if not member_records:
+        return
+
+    cust_ids = [cust_id for cust_id, _ in member_records]
     existing_ids = {
         row[0]
         for row in session.execute(select(Member.cust_id).where(Member.cust_id.in_(cust_ids)))
     }
-    for cust_id in cust_ids:
+    for cust_id, display_name in member_records:
         if cust_id not in existing_ids:
-            session.add(Member(cust_id=cust_id))
+            session.add(Member(cust_id=cust_id, display_name=display_name))
+        elif display_name:
+            member = session.get(Member, cust_id)
+            if member and member.display_name != display_name:
+                member.display_name = display_name
 
 
 def upsert_snapshot(

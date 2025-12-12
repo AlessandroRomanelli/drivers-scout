@@ -32,11 +32,6 @@ class Settings(BaseSettings):
     iracing_scope: str = Field("iracing.auth", description="OAuth scope")
     iracing_rate_limit_rpm: int = Field(60, description="Rate limit RPM for iRacing API")
 
-    cust_ids: List[int] = Field(
-        default_factory=list,
-        description="Comma separated cust_ids to track",
-        json_schema_extra={"example": "419877,221850"},
-    )
     categories: List[str] = Field(
         default_factory=lambda: ["sports_car"],
         description="Categories to fetch",
@@ -54,13 +49,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("cust_ids", mode="before")
-    @classmethod
-    def parse_cust_ids(cls, value: str | List[int]) -> List[int]:
-        if isinstance(value, str):
-            return [int(v.strip()) for v in value.split(",") if v.strip()]
-        return value
-
     @field_validator("categories", mode="before")
     @classmethod
     def parse_categories(cls, value: str | List[str]) -> List[str]:
@@ -72,11 +60,6 @@ class Settings(BaseSettings):
     @property
     def categories_normalized(self) -> List[str]:
         return [c.strip() for c in self.categories if c.strip()]
-
-    @computed_field
-    @property
-    def cust_ids_normalized(self) -> List[int]:
-        return [int(c) for c in self.cust_ids if str(c).strip()]
 
 
 settings = Settings()

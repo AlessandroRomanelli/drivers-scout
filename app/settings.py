@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from pydantic import Field, computed_field, field_validator
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     iracing_scope: str = Field("iracing.auth", description="OAuth scope")
     iracing_rate_limit_rpm: int = Field(60, description="Rate limit RPM for iRacing API")
 
-    categories: List[str] = Field(
-        default_factory=lambda: ["sports_car"],
-        description="Categories to fetch",
+    categories: str = Field(
+        "sports_car",
+        description="Categories to fetch as comma-separated values",
         json_schema_extra={"example": "sports_car"},
     )
 
@@ -49,16 +49,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("categories", mode="before")
-    @classmethod
-    def parse_categories(cls, value: str | List[str]) -> List[str]:
-        if isinstance(value, str):
-            return [v.strip() for v in value.split(",") if v.strip()]
-        return value
-
     @computed_field
     @property
     def categories_normalized(self) -> List[str]:
+        if isinstance(self.categories, str):
+            return [v.strip() for v in self.categories.split(",") if v.strip()]
         return [c.strip() for c in self.categories if c.strip()]
 
 

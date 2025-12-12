@@ -39,15 +39,17 @@ async def latest_member_snapshot(cust_id: int, category: str = Query("sports_car
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not snapshot:
         raise HTTPException(status_code=404, detail="No snapshot found")
+    member = snapshot.member
     return {
         "cust_id": cust_id,
         "category": category,
         "snapshot_date": snapshot.snapshot_date,
         "fetched_at": snapshot.fetched_at,
+        "driver": member.display_name if member else None,
+        "location": member.location if member else None,
         "irating": snapshot.irating,
-        "license_class": snapshot.license_class,
-        "license_sr": snapshot.license_sr,
-        "stats_json": snapshot.stats_json,
+        "starts": snapshot.starts,
+        "wins": snapshot.wins,
     }
 
 
@@ -66,12 +68,13 @@ async def member_history(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [
         {
+            "driver": s.member.display_name if s.member else None,
+            "location": s.member.location if s.member else None,
             "snapshot_date": s.snapshot_date,
             "fetched_at": s.fetched_at,
             "irating": s.irating,
-            "license_class": s.license_class,
-            "license_sr": s.license_sr,
-            "stats_json": s.stats_json,
+            "starts": s.starts,
+            "wins": s.wins,
         }
         for s in snapshots
     ]

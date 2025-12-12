@@ -16,7 +16,7 @@ from .repository import (
     fetch_latest_snapshot,
     fetch_snapshot_on_or_before,
     fetch_snapshots_range,
-    upsert_snapshot,
+    upsert_snapshots,
 )
 from .settings import settings
 
@@ -61,28 +61,26 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
                 if chunk_members:
                     ensure_members(session, chunk_members)
 
-                chunk_stored = 0
-                for item in chunk:
-                    cust_id = item.get("cust_id")
-                    if cust_id is None:
-                        continue
-                    upsert_snapshot(
-                        session,
-                        cust_id=cust_id,
-                        category=cat,
-                        snapshot_date=snapshot_day,
-                        fetched_at=fetched_at,
-                        irating=item.get("irating"),
-                        starts=item.get("starts"),
-                        wins=item.get("wins"),
-                    )
-                    chunk_stored += 1
-                return chunk_stored
+                snapshots = [
+                    {
+                        "cust_id": item.get("cust_id"),
+                        "category": cat,
+                        "snapshot_date": snapshot_day,
+                        "fetched_at": fetched_at,
+                        "irating": item.get("irating"),
+                        "starts": item.get("starts"),
+                        "wins": item.get("wins"),
+                    }
+                    for item in chunk
+                    if item.get("cust_id") is not None
+                ]
+                return upsert_snapshots(session, snapshots)
 
             buffer: List[Dict[str, object]] = []
+            batch_size = 300
             for item in normalized:
                 buffer.append(item)
-                if len(buffer) >= 500:
+                if len(buffer) >= batch_size:
                     stored += persist_chunk(buffer)
                     buffer = []
             if buffer:

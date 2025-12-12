@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 from zoneinfo import ZoneInfo
 
 from .db import get_session
@@ -46,32 +46,48 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
         snapshot_day = datetime.now(tz).date()
         fetched_at = datetime.now(timezone.utc)
         with get_session() as session:
-            members = [
-                (
-                    item["cust_id"],
-                    item.get("display_name"),
-                    item.get("location"),
-                )
-                for item in normalized
-                if item.get("cust_id")
-            ]
-            ensure_members(session, members)
             stored = 0
+
+            def persist_chunk(chunk: Sequence[Dict[str, object]]) -> int:
+                chunk_members = [
+                    (
+                        item["cust_id"],
+                        item.get("display_name"),
+                        item.get("location"),
+                    )
+                    for item in chunk
+                    if item.get("cust_id")
+                ]
+                if chunk_members:
+                    ensure_members(session, chunk_members)
+
+                chunk_stored = 0
+                for item in chunk:
+                    cust_id = item.get("cust_id")
+                    if cust_id is None:
+                        continue
+                    upsert_snapshot(
+                        session,
+                        cust_id=cust_id,
+                        category=cat,
+                        snapshot_date=snapshot_day,
+                        fetched_at=fetched_at,
+                        irating=item.get("irating"),
+                        starts=item.get("starts"),
+                        wins=item.get("wins"),
+                    )
+                    chunk_stored += 1
+                return chunk_stored
+
+            buffer: List[Dict[str, object]] = []
             for item in normalized:
-                cust_id = item.get("cust_id")
-                if cust_id is None:
-                    continue
-                upsert_snapshot(
-                    session,
-                    cust_id=cust_id,
-                    category=cat,
-                    snapshot_date=snapshot_day,
-                    fetched_at=fetched_at,
-                    irating=item.get("irating"),
-                    starts=item.get("starts"),
-                    wins=item.get("wins"),
-                )
-                stored += 1
+                buffer.append(item)
+                if len(buffer) >= 500:
+                    stored += persist_chunk(buffer)
+                    buffer = []
+            if buffer:
+                stored += persist_chunk(buffer)
+
             counts[cat] = stored
         logger.info("Stored %s snapshots for category %s", stored, cat)
 

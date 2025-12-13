@@ -104,8 +104,14 @@ async def leaders_growers(
     category: str = Query("sports_car"),
     days: int = Query(30, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    min_current_irating: int | None = Query(None, ge=0),
 ):
     if category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
-    results = get_top_growers(category, days, limit)
-    return {"category": category, "days": days, "results": results}
+    results = get_top_growers(category, days, limit, min_current_irating)
+    return {
+        "category": category,
+        "days": days,
+        "min_current_irating": min_current_irating,
+        "results": results,
+    }

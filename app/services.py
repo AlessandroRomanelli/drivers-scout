@@ -155,7 +155,9 @@ def get_irating_delta(
         }
 
 
-def get_top_growers(category: str, days: int, limit: int) -> List[Dict[str, object]]:
+def get_top_growers(
+    category: str, days: int, limit: int, min_current_irating: int | None = None
+) -> List[Dict[str, object]]:
     """Return top growers by iRating delta for tracked members."""
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
@@ -167,6 +169,7 @@ def get_top_growers(category: str, days: int, limit: int) -> List[Dict[str, obje
             start_date=start_date,
             end_date=end_date,
             limit=limit,
+            min_current_irating=min_current_irating,
         )
 
     results: List[Dict[str, object]] = []

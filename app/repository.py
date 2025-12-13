@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Iterable, Sequence
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -203,7 +203,10 @@ def fetch_irating_deltas_for_category(
         select(
             MemberStatsSnapshot.cust_id.label("cust_id"),
             MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
-            MemberStatsSnapshot.irating.label("irating"),
+            case(
+                (MemberStatsSnapshot.irating == -1, 1500),
+                else_=MemberStatsSnapshot.irating,
+            ).label("irating"),
             func.row_number()
             .over(
                 partition_by=MemberStatsSnapshot.cust_id,
@@ -267,6 +270,7 @@ def fetch_irating_deltas_for_category(
             and_(
                 start_latest.c.irating.is_not(None),
                 end_latest.c.irating.is_not(None),
+                end_latest.c.irating != -1,
             )
         )
         .order_by(delta_expression.desc())

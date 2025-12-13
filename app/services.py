@@ -14,6 +14,7 @@ from .repository import (
     ensure_members,
     fetch_all_cust_ids,
     fetch_latest_snapshot,
+    fetch_irating_deltas_for_category,
     fetch_snapshot_on_or_before,
     fetch_snapshots_range,
     upsert_snapshots,
@@ -156,12 +157,31 @@ def get_irating_delta(
 
 def get_top_growers(category: str, days: int, limit: int) -> List[Dict[str, object]]:
     """Return top growers by iRating delta for tracked members."""
-    results: List[Dict[str, object]] = []
+    end_date = date.today()
+    start_date = end_date - timedelta(days=days)
+
     with get_session() as session:
-        cust_ids = fetch_all_cust_ids(session)
-    for cust_id in cust_ids:
-        delta = get_irating_delta(cust_id, category, days=days)
-        if delta:
-            results.append(delta)
-    results.sort(key=lambda d: d.get("delta", 0), reverse=True)
-    return results[:limit]
+        deltas = fetch_irating_deltas_for_category(
+            session,
+            category=category,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
+
+    results: List[Dict[str, object]] = []
+    for item in deltas:
+        results.append(
+            {
+                "cust_id": item["cust_id"],
+                "category": category,
+                "start_date_used": item["start_snapshot_date"],
+                "end_date_used": item["end_snapshot_date"],
+                "start_value": item["start_irating"],
+                "end_value": item["end_irating"],
+                "delta": item["delta"],
+                "percent_change": item.get("percent_change"),
+            }
+        )
+
+    return results

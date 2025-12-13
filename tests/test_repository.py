@@ -113,6 +113,40 @@ class FetchIratingDeltasForCategoryTests(unittest.TestCase):
         self.assertEqual(deltas[0]["cust_id"], 4)
         self.assertEqual(deltas[0]["delta"], 200)
 
+    def test_skips_end_irating_negative_and_normalizes_start_negative(self) -> None:
+        start_date = date(2024, 1, 10)
+        end_date = date(2024, 1, 20)
+
+        for cust_id in (1, 2, 3):
+            self._add_member(cust_id)
+
+        # Member 1 has an end snapshot with -1 iRating; should be excluded entirely.
+        self._add_snapshot(1, date(2024, 1, 5), 1400)
+        self._add_snapshot(1, date(2024, 1, 20), -1)
+
+        # Member 2 starts at -1 (treated as 1500) and improves.
+        self._add_snapshot(2, date(2024, 1, 9), -1)
+        self._add_snapshot(2, date(2024, 1, 19), 1600)
+
+        # Member 3 has normal growth but smaller delta than member 2.
+        self._add_snapshot(3, date(2024, 1, 8), 1200)
+        self._add_snapshot(3, date(2024, 1, 18), 1250)
+
+        self.session.commit()
+
+        deltas = fetch_irating_deltas_for_category(
+            self.session,
+            category="oval",
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        self.assertEqual([row["cust_id"] for row in deltas], [2, 3])
+        self.assertEqual(deltas[0]["start_irating"], 1500)
+        self.assertEqual(deltas[0]["end_irating"], 1600)
+        self.assertEqual(deltas[0]["delta"], 100)
+        self.assertAlmostEqual(deltas[0]["percent_change"], 100 * 100 / 1500)
+
 
 if __name__ == "__main__":
     unittest.main()

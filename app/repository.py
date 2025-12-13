@@ -189,6 +189,95 @@ def fetch_snapshot_on_or_before(
     return session.scalars(stmt).first()
 
 
+def fetch_irating_deltas_for_category(
+    session: Session,
+    *,
+    category: str,
+    start_date: date,
+    end_date: date,
+    limit: int | None = None,
+) -> Sequence[dict[str, object]]:
+    """Return iRating deltas for members with snapshots on or before target dates."""
+
+    start_snapshots = (
+        select(
+            MemberStatsSnapshot.cust_id.label("cust_id"),
+            MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
+            MemberStatsSnapshot.irating.label("irating"),
+            func.row_number()
+            .over(
+                partition_by=MemberStatsSnapshot.cust_id,
+                order_by=MemberStatsSnapshot.snapshot_date.desc(),
+            )
+            .label("row_num"),
+        )
+        .where(
+            and_(
+                MemberStatsSnapshot.category == category,
+                MemberStatsSnapshot.snapshot_date <= start_date,
+            )
+        )
+        .cte("start_snapshots")
+    )
+
+    end_snapshots = (
+        select(
+            MemberStatsSnapshot.cust_id.label("cust_id"),
+            MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
+            MemberStatsSnapshot.irating.label("irating"),
+            func.row_number()
+            .over(
+                partition_by=MemberStatsSnapshot.cust_id,
+                order_by=MemberStatsSnapshot.snapshot_date.desc(),
+            )
+            .label("row_num"),
+        )
+        .where(
+            and_(
+                MemberStatsSnapshot.category == category,
+                MemberStatsSnapshot.snapshot_date <= end_date,
+            )
+        )
+        .cte("end_snapshots")
+    )
+
+    start_latest = select(start_snapshots).where(start_snapshots.c.row_num == 1).subquery()
+    end_latest = select(end_snapshots).where(end_snapshots.c.row_num == 1).subquery()
+
+    delta_expression = end_latest.c.irating - start_latest.c.irating
+    percent_change_expression = delta_expression * 100.0 / func.nullif(start_latest.c.irating, 0)
+
+    stmt = (
+        select(
+            end_latest.c.cust_id,
+            start_latest.c.snapshot_date.label("start_snapshot_date"),
+            end_latest.c.snapshot_date.label("end_snapshot_date"),
+            start_latest.c.irating.label("start_irating"),
+            end_latest.c.irating.label("end_irating"),
+            delta_expression.label("delta"),
+            percent_change_expression.label("percent_change"),
+        )
+        .select_from(
+            start_latest.join(
+                end_latest,
+                start_latest.c.cust_id == end_latest.c.cust_id,
+            )
+        )
+        .where(
+            and_(
+                start_latest.c.irating.is_not(None),
+                end_latest.c.irating.is_not(None),
+            )
+        )
+        .order_by(delta_expression.desc())
+    )
+
+    if limit:
+        stmt = stmt.limit(limit)
+
+    return list(session.execute(stmt).mappings().all())
+
+
 def fetch_all_cust_ids(session: Session) -> list[int]:
     """Return all tracked cust_ids."""
     return list(session.scalars(select(Member.cust_id)).all())

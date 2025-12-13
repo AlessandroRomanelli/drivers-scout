@@ -41,7 +41,7 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
     counts: Dict[str, int] = {}
 
     async def process_category(cat: str) -> None:
-        rows = await client.fetch_category_csv(cat)
+        rows = client.fetch_category_csv(cat)
         normalized = normalize_rows(rows)
         snapshot_day = datetime.now(tz).date()
         fetched_at = datetime.now(timezone.utc)
@@ -78,7 +78,7 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
 
             buffer: List[Dict[str, object]] = []
             batch_size = 300
-            for item in normalized:
+            async for item in normalized:
                 buffer.append(item)
                 if len(buffer) >= batch_size:
                     stored += persist_chunk(buffer)

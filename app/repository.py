@@ -6,7 +6,7 @@ from typing import Iterable, Sequence
 
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .models import Member, MemberStatsSnapshot
 
@@ -137,6 +137,7 @@ def fetch_latest_snapshot(
     """Return the most recent snapshot for a member/category."""
     return session.scalars(
         select(MemberStatsSnapshot)
+        .options(selectinload(MemberStatsSnapshot.member))
         .where(
             and_(
                 MemberStatsSnapshot.cust_id == cust_id,
@@ -156,7 +157,9 @@ def fetch_snapshots_range(
     end_date: date | None,
 ) -> Sequence[MemberStatsSnapshot]:
     """Fetch snapshots within date range inclusive."""
-    stmt = select(MemberStatsSnapshot).where(
+    stmt = select(MemberStatsSnapshot).options(
+        selectinload(MemberStatsSnapshot.member)
+    ).where(
         and_(
             MemberStatsSnapshot.cust_id == cust_id,
             MemberStatsSnapshot.category == category,

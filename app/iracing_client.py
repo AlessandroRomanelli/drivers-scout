@@ -6,7 +6,7 @@ import csv
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, Iterator
+from typing import Any, AsyncIterable, AsyncIterator, Dict, Iterable, Iterator
 
 import httpx
 
@@ -148,17 +148,34 @@ class IRacingClient:
                 await asyncio.sleep(2 ** attempt)
         raise RuntimeError("Failed to fetch after retries")
 
-    async def fetch_category_csv(self, category: str) -> list[Dict[str, Any]]:
-        """Fetch and parse category CSV, returning a list of dict rows."""
+    async def fetch_category_csv(self, category: str) -> AsyncIterator[Dict[str, Any]]:
+        """Stream category CSV rows as dictionaries."""
         data_url = DATA_URL_TEMPLATE.format(category=category)
         category_resp = await self._authorized_get(data_url)
         link = category_resp.json().get("link")
         if not link:
             raise RuntimeError("Missing CSV link in response")
-        csv_resp = await self._unauthorized_get(link)
-        decoded = csv_resp.text
-        reader = csv.DictReader(decoded.splitlines())
-        return list(reader)
+
+        async with self._client.stream("GET", link) as csv_resp:
+            csv_resp.raise_for_status()
+
+            line_iter = csv_resp.aiter_lines()
+
+            fieldnames: list[str] | None = None
+            async for line in line_iter:
+                if not line:
+                    continue
+                fieldnames = next(csv.reader([line]))
+                break
+
+            if not fieldnames:
+                return
+
+            async for line in line_iter:
+                if line == "":
+                    continue
+                for row in csv.DictReader([line], fieldnames=fieldnames):
+                    yield row
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -183,8 +200,14 @@ def normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def normalize_rows(rows: Iterable[Dict[str, Any]]) -> Iterator[Dict[str, Any]]:
-    """Normalize a collection of CSV rows without filtering by cust_id."""
+async def normalize_rows(
+    rows: AsyncIterable[Dict[str, Any]] | Iterable[Dict[str, Any]]
+) -> AsyncIterator[Dict[str, Any]]:
+    """Normalize CSV rows without filtering by cust_id."""
 
-    for row in rows:
-        yield normalize_row(row)
+    if hasattr(rows, "__aiter__"):
+        async for row in rows:  # type: ignore[operator]
+            yield normalize_row(row)
+    else:
+        for row in rows:
+            yield normalize_row(row)

@@ -147,6 +147,34 @@ class FetchIratingDeltasForCategoryTests(unittest.TestCase):
         self.assertEqual(deltas[0]["delta"], 100)
         self.assertAlmostEqual(deltas[0]["percent_change"], 100 * 100 / 1500)
 
+    def test_filters_by_minimum_current_irating(self) -> None:
+        start_date = date(2024, 1, 10)
+        end_date = date(2024, 1, 20)
+
+        for cust_id in (1, 2, 3):
+            self._add_member(cust_id)
+
+        self._add_snapshot(1, date(2024, 1, 9), 800)
+        self._add_snapshot(1, date(2024, 1, 19), 950)
+
+        self._add_snapshot(2, date(2024, 1, 9), 820)
+        self._add_snapshot(2, date(2024, 1, 19), 850)
+
+        self._add_snapshot(3, date(2024, 1, 9), 900)
+        self._add_snapshot(3, date(2024, 1, 19), 905)
+
+        self.session.commit()
+
+        deltas = fetch_irating_deltas_for_category(
+            self.session,
+            category="oval",
+            start_date=start_date,
+            end_date=end_date,
+            min_current_irating=900,
+        )
+
+        self.assertEqual([row["cust_id"] for row in deltas], [1, 3])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -196,6 +196,7 @@ def fetch_irating_deltas_for_category(
     start_date: date,
     end_date: date,
     limit: int | None = None,
+    min_current_irating: int | None = None,
 ) -> Sequence[dict[str, object]]:
     """Return iRating deltas for members with snapshots on or before target dates."""
 
@@ -275,6 +276,9 @@ def fetch_irating_deltas_for_category(
         )
         .order_by(delta_expression.desc())
     )
+
+    if min_current_irating is not None:
+        stmt = stmt.where(end_latest.c.irating >= min_current_irating)
 
     if limit:
         stmt = stmt.limit(limit)

@@ -67,7 +67,7 @@ async def run_fetch_now():
     return {"counts": counts}
 
 
-@router.post("/admin/licenses", dependencies=[Depends(_require_admin)])
+@public_router.post("/admin/licenses", dependencies=[Depends(_require_admin)])
 def issue_license(
     label: str | None = Body(None, embed=True), session: Session = Depends(_get_db_session)
 ):
@@ -80,7 +80,7 @@ def issue_license(
     return license_to_dict(record)
 
 
-@router.get("/admin/licenses", dependencies=[Depends(_require_admin)])
+@public_router.get("/admin/licenses", dependencies=[Depends(_require_admin)])
 def list_license_records(
     include_inactive: bool = Query(False),
     session: Session = Depends(_get_db_session),
@@ -89,7 +89,7 @@ def list_license_records(
     return [license_to_dict(record) for record in records]
 
 
-@router.post("/admin/licenses/{license_key}/revoke", dependencies=[Depends(_require_admin)])
+@public_router.post("/admin/licenses/{license_key}/revoke", dependencies=[Depends(_require_admin)])
 def revoke_license_key(
     license_key: str, session: Session = Depends(_get_db_session)
 ):
@@ -99,7 +99,7 @@ def revoke_license_key(
     return license_to_dict(record)
 
 
-@router.post(
+@public_router.post(
     "/admin/licenses/{license_key}/activate", dependencies=[Depends(_require_admin)]
 )
 def activate_license_key(

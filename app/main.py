@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
-from .api import router
+from .api import public_router, router
 from .scheduler import shutdown_scheduler, start_scheduler
 from .services import init_db
 from .settings import settings
@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Drivers Scout", lifespan=lifespan)
+app.include_router(public_router)
 app.include_router(router)
 
 

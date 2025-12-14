@@ -10,9 +10,10 @@ os.environ.setdefault("SNAPSHOTS_DIR", tempfile.mkdtemp(prefix="drivers-scout-te
 os.environ.setdefault("IRACING_USERNAME", "user")
 os.environ.setdefault("IRACING_PASSWORD", "pass")
 os.environ.setdefault("IRACING_CLIENT_SECRET", "secret")
-os.environ.setdefault("DATABASE_URL", "sqlite:///./drivers-scout-test.db")
+db_dir = Path(tempfile.mkdtemp(prefix="drivers-scout-test-licenses-db-"))
+os.environ["DATABASE_URL"] = f"sqlite:///{db_dir / 'drivers-scout-test.db'}"
 
-from app.api import router
+from app.api import public_router, router
 from app.db import get_session
 from app.models import License
 from app.services import init_db
@@ -28,6 +29,7 @@ class LicenseAdminTests(unittest.TestCase):
             cls.db_path.unlink()
         init_db()
         cls.app = FastAPI()
+        cls.app.include_router(public_router)
         cls.app.include_router(router)
         cls.client = TestClient(cls.app)
 

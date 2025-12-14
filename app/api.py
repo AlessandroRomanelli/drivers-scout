@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .auth import require_license
 from .db import get_session
+from .models import License
 from .license_repository import (
     activate_license,
     create_unique_license,
@@ -25,6 +26,7 @@ from .services import (
 )
 from .settings import settings
 
+public_router = APIRouter()
 router = APIRouter(dependencies=[Depends(require_license)])
 
 
@@ -39,9 +41,24 @@ def _get_db_session() -> Session:
         yield session
 
 
-@router.get("/health")
+@public_router.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@public_router.get("/licenses/{license_key}/status")
+def license_status(license_key: str, session: Session = Depends(_get_db_session)) -> dict:
+    record = session.get(License, license_key)
+    if not record:
+        return {"key": license_key, "valid": False, "active": False, "label": None, "revoked_at": None}
+
+    return {
+        "key": record.key,
+        "label": record.label,
+        "active": record.active,
+        "revoked_at": record.revoked_at,
+        "valid": bool(record.active),
+    }
 
 
 @router.post("/admin/run-fetch")

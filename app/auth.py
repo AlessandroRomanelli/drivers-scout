@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_session
 from .models import License
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,12 @@ def require_license(
     """Validate the incoming request includes an active license key."""
 
     if request.url.path in EXEMPT_PATHS:
+        return
+
+    if not settings.license_admin_secret:
+        return
+
+    if request.url.path.startswith("/admin") or request.url.path.startswith("/licenses/"):
         return
 
     token = _extract_license_token(x_license_key, authorization)

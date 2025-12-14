@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from .auth import require_license
 from .db import get_session
 from .license_repository import (
     activate_license,
@@ -24,7 +25,7 @@ from .services import (
 )
 from .settings import settings
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_license)])
 
 
 def _require_admin(admin_secret: str | None = Header(None, alias="X-Admin-Secret")) -> None:

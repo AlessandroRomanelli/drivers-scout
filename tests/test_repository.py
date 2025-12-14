@@ -1,179 +1,67 @@
+import os
+import shutil
+import tempfile
 import unittest
-from datetime import date, datetime, timezone
+from datetime import date, timedelta
+from pathlib import Path
+import asyncio
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+os.environ.setdefault("SNAPSHOTS_DIR", tempfile.mkdtemp(prefix="drivers-scout-test-services-"))
+os.environ.setdefault("IRACING_USERNAME", "user")
+os.environ.setdefault("IRACING_PASSWORD", "pass")
+os.environ.setdefault("IRACING_CLIENT_SECRET", "secret")
 
-from app.models import Base, Member, MemberStatsSnapshot
-from app.repository import fetch_irating_deltas_for_category
+from app.services import get_irating_delta, get_top_growers
 
 
-class FetchIratingDeltasForCategoryTests(unittest.TestCase):
+class SnapshotComputationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.engine = create_engine("sqlite:///:memory:", future=True)
-        Base.metadata.create_all(self.engine)
-        self.session = Session(self.engine)
+        self.category = "sports_car"
+        self.snapshots_dir = Path(os.environ["SNAPSHOTS_DIR"]) / self.category
+        if self.snapshots_dir.exists():
+            shutil.rmtree(self.snapshots_dir)
+        self.snapshots_dir.mkdir(parents=True, exist_ok=True)
+        self.end_date = date.today()
+        self.start_date = self.end_date - timedelta(days=5)
+        self._write_csv(
+            self.start_date,
+            [
+                ["CUSTID", "DRIVER", "LOCATION", "IRATING", "STARTS", "WINS"],
+                ["10", "Starter", "USA", "-1", "0", "0"],
+                ["11", "Grower", "UK", "900", "0", "0"],
+            ],
+        )
+        self._write_csv(
+            self.end_date,
+            [
+                ["CUSTID", "DRIVER", "LOCATION", "IRATING", "STARTS", "WINS"],
+                ["10", "Starter", "USA", "1500", "0", "0"],
+                ["11", "Grower", "UK", "1200", "0", "0"],
+            ],
+        )
 
     def tearDown(self) -> None:
-        self.session.close()
-        self.engine.dispose()
+        shutil.rmtree(self.snapshots_dir, ignore_errors=True)
 
-    def _add_member(self, cust_id: int, display_name: str = "Member") -> None:
-        self.session.add(Member(cust_id=cust_id, display_name=display_name, location=None))
+    def _write_csv(self, snapshot_date: date, rows: list[list[str]]) -> None:
+        path = self.snapshots_dir / f"{snapshot_date.isoformat()}.csv"
+        content = "\n".join([",".join(row) for row in rows])
+        path.write_text(content, encoding="utf-8")
 
-    def _add_snapshot(
-        self,
-        cust_id: int,
-        snapshot_date: date,
-        irating: int | None,
-        *,
-        category: str = "oval",
-    ) -> None:
-        self.session.add(
-            MemberStatsSnapshot(
-                cust_id=cust_id,
-                category=category,
-                snapshot_date=snapshot_date,
-                fetched_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                irating=irating,
-                starts=0,
-                wins=0,
-            )
+    def test_top_growers_respects_min_irating_and_normalizes_start(self) -> None:
+        results = asyncio.run(
+            get_top_growers(self.category, days=5, limit=5, min_current_irating=1000)
         )
+        self.assertEqual([r["cust_id"] for r in results], [11, 10])
+        self.assertEqual(results[0]["delta"], 300)
+        self.assertEqual(results[1]["start_value"], 1500)
 
-    def test_returns_sorted_deltas_using_closest_snapshots(self) -> None:
-        start_date = date(2024, 1, 10)
-        end_date = date(2024, 1, 20)
-
-        for cust_id in (1, 2, 3):
-            self._add_member(cust_id)
-
-        self._add_snapshot(1, date(2024, 1, 5), 1000)
-        self._add_snapshot(1, date(2024, 1, 9), 1010)
-        self._add_snapshot(1, date(2024, 1, 18), 1200)
-        self._add_snapshot(1, date(2024, 1, 21), 1300)  # After end_date, should be ignored
-
-        self._add_snapshot(2, date(2024, 1, 8), 800)
-        self._add_snapshot(2, date(2024, 1, 15), 900)
-        self._add_snapshot(2, date(2024, 1, 20), 950)
-
-        # Member 3 has no snapshot on or before the start_date
-        self._add_snapshot(3, date(2024, 1, 12), 700)
-        self._add_snapshot(3, date(2024, 1, 19), 800)
-
-        self.session.commit()
-
-        deltas = fetch_irating_deltas_for_category(
-            self.session,
-            category="oval",
-            start_date=start_date,
-            end_date=end_date,
+    def test_irating_delta_returns_none_without_data(self) -> None:
+        missing_date = self.end_date - timedelta(days=60)
+        result = asyncio.run(
+            get_irating_delta(99, self.category, start_date=missing_date, end_date=self.end_date)
         )
-
-        self.assertEqual([row["cust_id"] for row in deltas], [1, 2])
-        self.assertEqual(deltas[0]["delta"], 190)
-        self.assertEqual(deltas[1]["delta"], 150)
-        self.assertEqual(deltas[0]["start_snapshot_date"], date(2024, 1, 9))
-        self.assertEqual(deltas[0]["end_snapshot_date"], date(2024, 1, 18))
-        self.assertEqual(deltas[1]["start_snapshot_date"], date(2024, 1, 8))
-        self.assertEqual(deltas[1]["end_snapshot_date"], date(2024, 1, 20))
-
-    def test_excludes_null_iratings_and_applies_limit(self) -> None:
-        start_date = date(2024, 1, 10)
-        end_date = date(2024, 1, 20)
-
-        for cust_id in (1, 2, 3, 4):
-            self._add_member(cust_id)
-
-        # Missing start iRating
-        self._add_snapshot(1, date(2024, 1, 5), None)
-        self._add_snapshot(1, date(2024, 1, 18), 1000)
-
-        # Missing end iRating
-        self._add_snapshot(2, date(2024, 1, 5), 900)
-        self._add_snapshot(2, date(2024, 1, 18), None)
-
-        self._add_snapshot(3, date(2024, 1, 8), 700)
-        self._add_snapshot(3, date(2024, 1, 19), 800)
-
-        self._add_snapshot(4, date(2024, 1, 8), 1000)
-        self._add_snapshot(4, date(2024, 1, 19), 1200)
-
-        self.session.commit()
-
-        deltas = fetch_irating_deltas_for_category(
-            self.session,
-            category="oval",
-            start_date=start_date,
-            end_date=end_date,
-            limit=1,
-        )
-
-        self.assertEqual(len(deltas), 1)
-        self.assertEqual(deltas[0]["cust_id"], 4)
-        self.assertEqual(deltas[0]["delta"], 200)
-
-    def test_skips_end_irating_negative_and_normalizes_start_negative(self) -> None:
-        start_date = date(2024, 1, 10)
-        end_date = date(2024, 1, 20)
-
-        for cust_id in (1, 2, 3):
-            self._add_member(cust_id)
-
-        # Member 1 has an end snapshot with -1 iRating; should be excluded entirely.
-        self._add_snapshot(1, date(2024, 1, 5), 1400)
-        self._add_snapshot(1, date(2024, 1, 20), -1)
-
-        # Member 2 starts at -1 (treated as 1500) and improves.
-        self._add_snapshot(2, date(2024, 1, 9), -1)
-        self._add_snapshot(2, date(2024, 1, 19), 1600)
-
-        # Member 3 has normal growth but smaller delta than member 2.
-        self._add_snapshot(3, date(2024, 1, 8), 1200)
-        self._add_snapshot(3, date(2024, 1, 18), 1250)
-
-        self.session.commit()
-
-        deltas = fetch_irating_deltas_for_category(
-            self.session,
-            category="oval",
-            start_date=start_date,
-            end_date=end_date,
-        )
-
-        self.assertEqual([row["cust_id"] for row in deltas], [2, 3])
-        self.assertEqual(deltas[0]["start_irating"], 1500)
-        self.assertEqual(deltas[0]["end_irating"], 1600)
-        self.assertEqual(deltas[0]["delta"], 100)
-        self.assertAlmostEqual(deltas[0]["percent_change"], 100 * 100 / 1500)
-
-    def test_filters_by_minimum_current_irating(self) -> None:
-        start_date = date(2024, 1, 10)
-        end_date = date(2024, 1, 20)
-
-        for cust_id in (1, 2, 3):
-            self._add_member(cust_id)
-
-        self._add_snapshot(1, date(2024, 1, 9), 800)
-        self._add_snapshot(1, date(2024, 1, 19), 950)
-
-        self._add_snapshot(2, date(2024, 1, 9), 820)
-        self._add_snapshot(2, date(2024, 1, 19), 850)
-
-        self._add_snapshot(3, date(2024, 1, 9), 900)
-        self._add_snapshot(3, date(2024, 1, 19), 905)
-
-        self.session.commit()
-
-        deltas = fetch_irating_deltas_for_category(
-            self.session,
-            category="oval",
-            start_date=start_date,
-            end_date=end_date,
-            min_current_irating=900,
-        )
-
-        self.assertEqual([row["cust_id"] for row in deltas], [1, 3])
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

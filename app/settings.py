@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     schedule_minute: int = Field(0, ge=0, le=59, description="Minute for daily job")
     scheduler_enabled: bool = Field(True, description="Toggle scheduler for local dev")
 
-    database_url: str = Field(
-        "sqlite:///./iracing_stats.db", description="Database URL; SQLite by default"
+    snapshots_dir: Path = Field(
+        Path("snapshots"), description="Directory for storing downloaded CSV snapshots"
     )
 
     iracing_username: str = Field(..., description="iRacing account username")

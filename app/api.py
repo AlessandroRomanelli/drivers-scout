@@ -33,24 +33,10 @@ async def run_fetch_now():
 async def latest_member_snapshot(cust_id: int, category: str = Query("sports_car")):
     if category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
-    try:
-        snapshot = get_latest_snapshot(cust_id, category)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    snapshot = await get_latest_snapshot(cust_id, category)
     if not snapshot:
         raise HTTPException(status_code=404, detail="No snapshot found")
-    member = snapshot.member
-    return {
-        "cust_id": cust_id,
-        "category": category,
-        "snapshot_date": snapshot.snapshot_date,
-        "fetched_at": snapshot.fetched_at,
-        "driver": member.display_name if member else None,
-        "location": member.location if member else None,
-        "irating": snapshot.irating,
-        "starts": snapshot.starts,
-        "wins": snapshot.wins,
-    }
+    return snapshot
 
 
 @router.get("/members/{cust_id}/history")
@@ -62,22 +48,8 @@ async def member_history(
 ):
     if category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
-    try:
-        snapshots = get_history(cust_id, category, start, end)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [
-        {
-            "driver": s.member.display_name if s.member else None,
-            "location": s.member.location if s.member else None,
-            "snapshot_date": s.snapshot_date,
-            "fetched_at": s.fetched_at,
-            "irating": s.irating,
-            "starts": s.starts,
-            "wins": s.wins,
-        }
-        for s in snapshots
-    ]
+    snapshots = await get_history(cust_id, category, start, end)
+    return snapshots
 
 
 @router.get("/members/{cust_id}/delta")
@@ -90,10 +62,9 @@ async def member_delta(
 ):
     if category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
-    try:
-        result = get_irating_delta(cust_id, category, days=days, start_date=start, end_date=end)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    result = await get_irating_delta(
+        cust_id, category, days=days, start_date=start, end_date=end
+    )
     if not result:
         raise HTTPException(status_code=404, detail="Insufficient data")
     return result

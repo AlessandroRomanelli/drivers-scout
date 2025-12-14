@@ -1,25 +1,21 @@
-"""Business logic for fetching and computing statistics."""
+"""Business logic for fetching and computing statistics using CSV snapshots."""
 from __future__ import annotations
 
 import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from fastapi.concurrency import run_in_threadpool
 
-from .db import get_session
-from .iracing_client import IRacingClient, normalize_rows
-from .models import Base
-from .repository import (
-    ensure_members,
-    fetch_all_cust_ids,
-    fetch_latest_snapshot,
-    fetch_irating_deltas_for_category,
-    fetch_snapshot_on_or_before,
-    fetch_snapshots_range,
-    upsert_snapshots,
+from .iracing_client import IRacingClient
+from .snapshots import (
+    find_closest_snapshot,
+    load_snapshot_map,
+    load_snapshot_rows,
+    snapshot_path,
+    store_snapshot,
 )
 from .settings import settings
 
@@ -27,87 +23,58 @@ logger = logging.getLogger(__name__)
 
 
 def init_db() -> None:
-    """Create database tables."""
-    from .db import engine
+    """Placeholder for legacy database initialization."""
+    logger.info("Database initialization skipped; using filesystem snapshots")
 
-    Base.metadata.create_all(bind=engine)
+
+async def _download_snapshot(category: str, snapshot_date: date, client: IRacingClient) -> Path:
+    content = await client.download_category_csv(category)
+    return store_snapshot(category, snapshot_date, content)
+
+
+async def _ensure_snapshot(
+    category: str,
+    target_date: date,
+    client: IRacingClient,
+    *,
+    fetch_if_missing: bool,
+) -> Tuple[Path | None, date | None]:
+    """Return snapshot path for target_date or the closest available."""
+
+    path = snapshot_path(category, target_date)
+    if path.exists():
+        return path, target_date
+
+    if fetch_if_missing:
+        try:
+            downloaded = await _download_snapshot(category, target_date, client)
+            return downloaded, target_date
+        except Exception:
+            logger.exception("Failed to fetch snapshot for %s on %s", category, target_date)
+
+    return find_closest_snapshot(category, target_date)
 
 
 async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
-    """Fetch stats for configured categories and store snapshots.
+    """Fetch stats for configured categories and store snapshots as CSV files."""
 
-    Returns a dict of counts keyed by category.
-    """
     target_categories = [category] if category else settings.categories_normalized
     tz = ZoneInfo(settings.app_timezone)
-    client = IRacingClient()
+    snapshot_day = datetime.now(tz).date()
     counts: Dict[str, int] = {}
+
+    client = IRacingClient()
 
     async def process_category(cat: str) -> None:
         logger.info("Starting fetch for category %s", cat)
-        rows = client.fetch_category_csv(cat)
-        normalized = normalize_rows(rows)
-        snapshot_day = datetime.now(tz).date()
-        fetched_at = datetime.now(timezone.utc)
-        with get_session() as session:
-            stored = 0
-
-            def persist_chunk(chunk: Sequence[Dict[str, object]]) -> int:
-                if not chunk:
-                    logger.warning("Empty chunk encountered for category %s", cat)
-                    return 0
-                chunk_members = [
-                    (
-                        item["cust_id"],
-                        item.get("display_name"),
-                        item.get("location"),
-                    )
-                    for item in chunk
-                    if item.get("cust_id")
-                ]
-                if chunk_members:
-                    ensure_members(session, chunk_members)
-                else:
-                    logger.warning("Chunk missing members for category %s", cat)
-
-                snapshots = [
-                    {
-                        "cust_id": item.get("cust_id"),
-                        "category": cat,
-                        "snapshot_date": snapshot_day,
-                        "fetched_at": fetched_at,
-                        "irating": item.get("irating"),
-                        "starts": item.get("starts"),
-                        "wins": item.get("wins"),
-                    }
-                    for item in chunk
-                    if item.get("cust_id") is not None
-                ]
-                stored_count = upsert_snapshots(session, snapshots)
-                logger.info(
-                    "Persisted chunk of %s rows (%s total) for category %s",
-                    len(chunk),
-                    stored + stored_count,
-                    cat,
-                )
-                return stored_count
-
-            buffer: List[Dict[str, object]] = []
-            batch_size = 300
-            processed = 0
-            async for item in normalized:
-                buffer.append(item)
-                processed += 1
-                if processed % 500 == 0:
-                    logger.info("Processed %s normalized rows for category %s", processed, cat)
-                if len(buffer) >= batch_size:
-                    stored += persist_chunk(buffer)
-                    buffer = []
-            if buffer:
-                stored += persist_chunk(buffer)
-
-            counts[cat] = stored
-        logger.info("Completed fetch for category %s with %s snapshots", cat, stored)
+        path = await _download_snapshot(cat, snapshot_day, client)
+        counts[cat] = sum(1 for _ in load_snapshot_rows(path))
+        logger.info(
+            "Completed fetch for category %s with %s rows stored at %s",
+            cat,
+            counts[cat],
+            path,
+        )
 
     try:
         await asyncio.gather(*(process_category(cat) for cat in target_categories))
@@ -116,68 +83,146 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
     return counts
 
 
-def _find_member_or_raise(cust_id: int) -> None:
-    with get_session() as session:
-        known_ids = fetch_all_cust_ids(session)
-    if cust_id not in known_ids:
-        raise ValueError(f"cust_id {cust_id} not tracked")
+async def _get_member_row(
+    cust_id: int, category: str, target_date: date | None = None
+) -> tuple[Dict[str, object] | None, date | None]:
+    client = IRacingClient()
+    try:
+        target_date = target_date or date.today()
+        path, resolved_date = await _ensure_snapshot(
+            category, target_date, client, fetch_if_missing=True
+        )
+        if not path:
+            return None, None
+        for row in load_snapshot_rows(path):
+            if row.get("cust_id") == cust_id:
+                return row, resolved_date
+        return None, resolved_date
+    finally:
+        await client.close()
 
 
-def get_latest_snapshot(cust_id: int, category: str):
-    _find_member_or_raise(cust_id)
-    with get_session() as session:
-        return fetch_latest_snapshot(session, cust_id, category)
+async def get_latest_snapshot(cust_id: int, category: str):
+    row, snapshot_date = await _get_member_row(cust_id, category)
+    if not row or not snapshot_date:
+        return None
+    return {
+        "cust_id": cust_id,
+        "category": category,
+        "snapshot_date": snapshot_date,
+        "fetched_at": datetime.now(timezone.utc),
+        "driver": row.get("display_name"),
+        "location": row.get("location"),
+        "irating": row.get("irating"),
+        "starts": row.get("starts"),
+        "wins": row.get("wins"),
+    }
 
 
-def get_history(cust_id: int, category: str, start: Optional[date], end: Optional[date]):
-    _find_member_or_raise(cust_id)
-    with get_session() as session:
-        return fetch_snapshots_range(session, cust_id, category, start, end)
+async def get_history(
+    cust_id: int,
+    category: str,
+    start: Optional[date],
+    end: Optional[date],
+) -> List[Dict[str, object]]:
+    start = start or date.min
+    end = end or date.max
+    client = IRacingClient()
+    results: List[Dict[str, object]] = []
+    try:
+        path, resolved_end = await _ensure_snapshot(
+            category, end, client, fetch_if_missing=(end == date.today())
+        )
+        if not path:
+            return []
+        directory = path.parent
+        for file_path in sorted(directory.glob("*.csv")):
+            snapshot_date = file_path.stem
+            try:
+                file_date = datetime.strptime(snapshot_date, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if not (start <= file_date <= end):
+                continue
+            for row in load_snapshot_rows(file_path):
+                if row.get("cust_id") == cust_id:
+                    results.append(
+                        {
+                            "snapshot_date": file_date,
+                            "fetched_at": datetime.now(timezone.utc),
+                            "driver": row.get("display_name"),
+                            "location": row.get("location"),
+                            "irating": row.get("irating"),
+                            "starts": row.get("starts"),
+                            "wins": row.get("wins"),
+                        }
+                    )
+        return sorted(results, key=lambda item: item["snapshot_date"])
+    finally:
+        await client.close()
 
 
-def get_irating_delta(
+async def get_irating_delta(
     cust_id: int,
     category: str,
     days: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
 ):
-    """Compute iRating delta between two snapshots."""
     if days is not None:
         end_date = end_date or date.today()
         start_date = end_date - timedelta(days=days)
     if not end_date:
         end_date = date.today()
-    _find_member_or_raise(cust_id)
-    with get_session() as session:
-        end_snapshot = fetch_snapshot_on_or_before(session, cust_id, category, end_date)
-        start_snapshot = None
-        if start_date:
-            start_snapshot = fetch_snapshot_on_or_before(session, cust_id, category, start_date)
-        if not end_snapshot or not start_snapshot:
+    start_date = start_date or (end_date - timedelta(days=1))
+
+    client = IRacingClient()
+    try:
+        end_path, end_used = await _ensure_snapshot(
+            category, end_date, client, fetch_if_missing=True
+        )
+        if not end_path or not end_used:
             return None
-        start_value = start_snapshot.irating
-        end_value = end_snapshot.irating
-        if start_value is None or end_value is None:
+        start_path, start_used = await _ensure_snapshot(
+            category, start_date, client, fetch_if_missing=False
+        )
+        if not start_path or not start_used:
             return None
+
+        start_map = load_snapshot_map(start_path)
+        end_map = load_snapshot_map(end_path)
+        start_row = start_map.get(cust_id)
+        end_row = end_map.get(cust_id)
+        if not start_row or not end_row:
+            return None
+
+        start_value = start_row.get("irating")
+        end_value = end_row.get("irating")
+        if not isinstance(end_value, int) or end_value == -1:
+            return None
+        if not isinstance(start_value, int):
+            return None
+        start_value = 1500 if start_value == -1 else start_value
         delta = end_value - start_value
         percent_change = (delta / start_value * 100) if start_value else None
+
         return {
             "cust_id": cust_id,
             "category": category,
-            "start_date_used": start_snapshot.snapshot_date,
-            "end_date_used": end_snapshot.snapshot_date,
+            "start_date_used": start_used,
+            "end_date_used": end_used,
             "start_value": start_value,
             "end_value": end_value,
             "delta": delta,
             "percent_change": percent_change,
         }
+    finally:
+        await client.close()
 
 
 async def get_top_growers(
     category: str, days: int, limit: int, min_current_irating: int | None = None
 ) -> List[Dict[str, object]]:
-    """Return top growers by iRating delta for tracked members without blocking."""
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
 
@@ -189,46 +234,67 @@ async def get_top_growers(
         min_current_irating,
     )
 
-    def _fetch_deltas() -> Sequence[dict[str, object]]:
-        start_time = datetime.now(timezone.utc)
-        with get_session() as session:
-            try:
-                return fetch_irating_deltas_for_category(
-                    session,
-                    category=category,
-                    start_date=start_date,
-                    end_date=end_date,
-                    limit=limit,
-                    min_current_irating=min_current_irating,
-                )
-            finally:
-                duration = (datetime.now(timezone.utc) - start_time).total_seconds()
-                logger.info(
-                    "Completed delta query in %.3fs for category=%s", duration, category
-                )
-
-    deltas = await run_in_threadpool(_fetch_deltas)
-
-    results: List[Dict[str, object]] = []
-    for item in deltas:
-        results.append(
-            {
-                "cust_id": item["cust_id"],
-                "category": category,
-                "start_date_used": item["start_snapshot_date"],
-                "end_date_used": item["end_snapshot_date"],
-                "start_value": item["start_irating"],
-                "end_value": item["end_irating"],
-                "delta": item["delta"],
-                "percent_change": item.get("percent_change"),
-            }
+    client = IRacingClient()
+    try:
+        end_path, end_used = await _ensure_snapshot(
+            category, end_date, client, fetch_if_missing=True
         )
+        if not end_path or not end_used:
+            logger.warning("No snapshots available for %s", category)
+            return []
 
-    logger.info(
-        "Prepared %s top grower results for category=%s (requested limit=%s)",
-        len(results),
-        category,
-        limit,
-    )
+        start_path, start_used = await _ensure_snapshot(
+            category, start_date, client, fetch_if_missing=False
+        )
+        if not start_path or not start_used:
+            logger.warning("No starting snapshot found for %s", category)
+            return []
 
-    return results
+        def _compute() -> List[Dict[str, object]]:
+            start_map = load_snapshot_map(start_path)
+            end_map = load_snapshot_map(end_path)
+            results: List[Dict[str, object]] = []
+            for cust_id, end_row in end_map.items():
+                end_ir = end_row.get("irating")
+                if not isinstance(end_ir, int) or end_ir == -1:
+                    continue
+                if min_current_irating is not None and end_ir < min_current_irating:
+                    continue
+                start_row = start_map.get(cust_id)
+                if not start_row:
+                    continue
+                start_ir = start_row.get("irating")
+                if not isinstance(start_ir, int):
+                    continue
+                normalized_start = 1500 if start_ir == -1 else start_ir
+                delta = end_ir - normalized_start
+                percent_change = (
+                    delta * 100.0 / normalized_start if normalized_start else None
+                )
+                results.append(
+                    {
+                        "cust_id": cust_id,
+                        "category": category,
+                        "start_date_used": start_used,
+                        "end_date_used": end_used,
+                        "start_value": normalized_start,
+                        "end_value": end_ir,
+                        "delta": delta,
+                        "percent_change": percent_change,
+                        "driver": end_row.get("display_name"),
+                        "location": end_row.get("location"),
+                    }
+                )
+            results.sort(key=lambda item: item["delta"], reverse=True)
+            return results[:limit]
+
+        computed = await run_in_threadpool(_compute)
+        logger.info(
+            "Prepared %s top grower results for category=%s (requested limit=%s)",
+            len(computed),
+            category,
+            limit,
+        )
+        return computed
+    finally:
+        await client.close()

@@ -17,8 +17,8 @@ A small FastAPI service that archives iRacing member statistics daily and expose
 
 ## Configuration
 Environment variables (via `.env`):
-- `APP_TIMEZONE` (default `Europe/Zurich`)
-- `SCHEDULE_HOUR`, `SCHEDULE_MINUTE` (daily run time)
+- `APP_TIMEZONE` (default `UTC`)
+- `SCHEDULE_HOUR`, `SCHEDULE_MINUTE` (daily run time, default `23:55 UTC`)
 - `SCHEDULER_ENABLED` (set `false` to disable during local dev)
 - `SNAPSHOTS_DIR` root directory for downloaded CSVs
 - `IRACING_USERNAME`, `IRACING_PASSWORD` (opaque string), `IRACING_CLIENT_SECRET`

@@ -1,0 +1,498 @@
+openapi: 3.0.3
+info:
+  title: Drivers Scout API
+  version: 1.0.0
+  description: |
+    HTTP API for the Drivers Scout service, which archives iRacing member statistics
+    as dated CSV snapshots and exposes deltas and growth leaders.
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+components:
+  securitySchemes:
+    LicenseKeyAuth:
+      type: apiKey
+      in: header
+      name: X-License-Key
+      description: >-
+        Active license key issued via the admin endpoints. Required for member and
+        leader endpoints when `LICENSE_ADMIN_SECRET` is configured.
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: License
+      description: >-
+        Alternative way to provide the license token via the `Authorization: Bearer`
+        header.
+    AdminSecretAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Secret
+      description: Secret token matching `LICENSE_ADMIN_SECRET`, required for admin license endpoints.
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+    LicenseStatus:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        valid:
+          type: boolean
+      required: [key, active, revoked_at, valid]
+    LicenseRecord:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [key, active, created_at]
+    FetchCounts:
+      type: object
+      properties:
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Number of rows stored per category.
+      required: [counts]
+    MemberSnapshot:
+      type: object
+      properties:
+        cust_id:
+          type: integer
+        category:
+          type: string
+        snapshot_date:
+          type: string
+          format: date
+        fetched_at:
+          type: string
+          format: date-time
+        driver:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        irating:
+          type: integer
+          nullable: true
+        starts:
+          type: integer
+          nullable: true
+        wins:
+          type: integer
+          nullable: true
+      required: [cust_id, category, snapshot_date, fetched_at]
+    MemberHistoryItem:
+      type: object
+      properties:
+        snapshot_date:
+          type: string
+          format: date
+        fetched_at:
+          type: string
+          format: date-time
+        driver:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        irating:
+          type: integer
+          nullable: true
+        starts:
+          type: integer
+          nullable: true
+        wins:
+          type: integer
+          nullable: true
+      required: [snapshot_date, fetched_at]
+    DeltaResult:
+      type: object
+      properties:
+        cust_id:
+          type: integer
+        category:
+          type: string
+        start_date_used:
+          type: string
+          format: date
+        end_date_used:
+          type: string
+          format: date
+        start_value:
+          type: integer
+        end_value:
+          type: integer
+        delta:
+          type: integer
+        percent_change:
+          type: number
+          format: float
+          nullable: true
+      required: [cust_id, category, start_date_used, end_date_used, start_value, end_value, delta]
+    TopGrowerEntry:
+      type: object
+      properties:
+        cust_id:
+          type: integer
+        category:
+          type: string
+        start_date_used:
+          type: string
+          format: date
+          nullable: true
+        end_date_used:
+          type: string
+          format: date
+          nullable: true
+        start_value:
+          type: integer
+        end_value:
+          type: integer
+        delta:
+          type: integer
+        percent_change:
+          type: number
+          format: float
+          nullable: true
+        driver:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+      required: [cust_id, category, start_value, end_value, delta]
+    TopGrowersResponse:
+      type: object
+      properties:
+        category:
+          type: string
+        min_current_irating:
+          type: integer
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopGrowerEntry'
+        start_date_used:
+          type: string
+          format: date
+          nullable: true
+        end_date_used:
+          type: string
+          format: date
+          nullable: true
+        snapshot_age_days:
+          type: integer
+          nullable: true
+      required: [category, results]
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /licenses/{license_key}/status:
+    get:
+      summary: Check license status
+      parameters:
+        - in: path
+          name: license_key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: License validity information.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseStatus'
+  /admin/run-fetch:
+    post:
+      summary: Trigger an immediate snapshot fetch
+      description: Fetches the configured category snapshots for today and stores them locally.
+      responses:
+        '200':
+          description: Fetch completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FetchCounts'
+  /admin/licenses:
+    post:
+      summary: Issue a new license
+      security:
+        - AdminSecretAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: License created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseRecord'
+        '401':
+          description: Admin secret missing or invalid.
+    get:
+      summary: List licenses
+      security:
+        - AdminSecretAuth: []
+      parameters:
+        - in: query
+          name: include_inactive
+          schema:
+            type: boolean
+          description: Include revoked licenses when true.
+      responses:
+        '200':
+          description: Licenses matching the filter.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LicenseRecord'
+        '401':
+          description: Admin secret missing or invalid.
+  /admin/licenses/{license_key}/revoke:
+    post:
+      summary: Revoke a license key
+      security:
+        - AdminSecretAuth: []
+      parameters:
+        - in: path
+          name: license_key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: License revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseRecord'
+        '401':
+          description: Admin secret missing or invalid.
+        '404':
+          description: License not found.
+  /admin/licenses/{license_key}/activate:
+    post:
+      summary: Activate a license key
+      security:
+        - AdminSecretAuth: []
+      parameters:
+        - in: path
+          name: license_key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: License activated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseRecord'
+        '401':
+          description: Admin secret missing or invalid.
+        '404':
+          description: License not found.
+  /members/{cust_id}/latest:
+    get:
+      summary: Latest snapshot for a member
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: cust_id
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: category
+          schema:
+            type: string
+            default: sports_car
+          description: Category name as configured in the service.
+      responses:
+        '200':
+          description: Latest available snapshot for the member.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberSnapshot'
+        '400':
+          description: Unsupported category.
+        '404':
+          description: No snapshot found.
+  /members/{cust_id}/history:
+    get:
+      summary: Historical snapshots for a member
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: cust_id
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: category
+          schema:
+            type: string
+            default: sports_car
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date
+          description: Inclusive start date (YYYY-MM-DD). Defaults to earliest available.
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date
+          description: Inclusive end date (YYYY-MM-DD). Defaults to latest available.
+      responses:
+        '200':
+          description: Ordered snapshots within the date range.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemberHistoryItem'
+        '400':
+          description: Unsupported category.
+  /members/{cust_id}/delta:
+    get:
+      summary: iRating delta for a member
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: cust_id
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: category
+          schema:
+            type: string
+            default: sports_car
+        - in: query
+          name: days
+          schema:
+            type: integer
+            minimum: 1
+          description: Convenience window size. When provided, start date is derived from end date minus days.
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date
+          description: Explicit start date (YYYY-MM-DD).
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date
+          description: Explicit end date (YYYY-MM-DD). Defaults to today.
+      responses:
+        '200':
+          description: Delta between the two snapshots.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeltaResult'
+        '400':
+          description: Unsupported category.
+        '404':
+          description: Insufficient data to compute delta.
+  /leaders/growers:
+    get:
+      summary: Top iRating growers
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+            default: sports_car
+        - in: query
+          name: days
+          schema:
+            type: integer
+            minimum: 1
+            default: 30
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: min_current_irating
+          schema:
+            type: integer
+            minimum: 0
+          description: Require the end snapshot to have at least this iRating.
+      responses:
+        '200':
+          description: Leaders ordered by iRating gain.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopGrowersResponse'
+        '400':
+          description: Unsupported category.

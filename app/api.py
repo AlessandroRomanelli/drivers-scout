@@ -82,7 +82,6 @@ async def leaders_growers(
     data = await get_top_growers(category, days, limit, min_current_irating)
     return {
         "category": category,
-        "days": days,
         "min_current_irating": min_current_irating,
         "results": data.get("results", []),
         "start_date_used": data.get("start_date_used"),

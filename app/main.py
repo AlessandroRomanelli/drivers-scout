@@ -32,13 +32,20 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Initializing database")
-    init_db()
-    start_scheduler()
+    logger.info("Initializing application lifespan")
     try:
+        logger.info("Initializing database")
+        init_db()
+        start_scheduler()
+        logger.info("Lifespan startup complete")
         yield
+        logger.info("Lifespan shutdown initiated")
+    except Exception:
+        logger.exception("Lifespan encountered an error")
+        raise
     finally:
         shutdown_scheduler()
+        logger.info("Lifespan cleanup completed")
 
 
 app = FastAPI(title="Drivers Scout", lifespan=lifespan)
@@ -47,6 +54,16 @@ app.include_router(router)
 
 def main() -> None:
     """Run the ASGI server."""
+    logger.debug("Preparing to start ASGI server")
+    logger.info(
+        "Logger configured: path=%s level=%s", log_file_path.resolve(), logging.getLevelName(logger.getEffectiveLevel())
+    )
+    logger.info(
+        "Server configuration: host=%s port=%s scheduler_enabled=%s",
+        settings.host,
+        settings.port,
+        settings.scheduler_enabled,
+    )
     uvicorn.run(
         "app.main:app",
         host=settings.host,

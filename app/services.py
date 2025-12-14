@@ -181,16 +181,31 @@ async def get_top_growers(
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
 
+    logger.info(
+        "Fetching top growers: category=%s days=%s limit=%s min_current_irating=%s",
+        category,
+        days,
+        limit,
+        min_current_irating,
+    )
+
     def _fetch_deltas() -> Sequence[dict[str, object]]:
+        start_time = datetime.now(timezone.utc)
         with get_session() as session:
-            return fetch_irating_deltas_for_category(
-                session,
-                category=category,
-                start_date=start_date,
-                end_date=end_date,
-                limit=limit,
-                min_current_irating=min_current_irating,
-            )
+            try:
+                return fetch_irating_deltas_for_category(
+                    session,
+                    category=category,
+                    start_date=start_date,
+                    end_date=end_date,
+                    limit=limit,
+                    min_current_irating=min_current_irating,
+                )
+            finally:
+                duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+                logger.info(
+                    "Completed delta query in %.3fs for category=%s", duration, category
+                )
 
     deltas = await run_in_threadpool(_fetch_deltas)
 
@@ -208,5 +223,12 @@ async def get_top_growers(
                 "percent_change": item.get("percent_change"),
             }
         )
+
+    logger.info(
+        "Prepared %s top grower results for category=%s (requested limit=%s)",
+        len(results),
+        category,
+        limit,
+    )
 
     return results

@@ -49,9 +49,13 @@ class SnapshotComputationTests(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
 
     def test_top_growers_respects_min_irating_and_normalizes_start(self) -> None:
-        results = asyncio.run(
+        data = asyncio.run(
             get_top_growers(self.category, days=5, limit=5, min_current_irating=1000)
         )
+        self.assertEqual(data["start_date_used"], self.start_date)
+        self.assertEqual(data["end_date_used"], self.end_date)
+        self.assertEqual(data["snapshot_age_days"], (self.end_date - self.start_date).days)
+        results = data["results"]
         self.assertEqual([r["cust_id"] for r in results], [11, 10])
         self.assertEqual(results[0]["delta"], 300)
         self.assertEqual(results[1]["start_value"], 1500)

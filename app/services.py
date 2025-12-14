@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -222,7 +223,7 @@ async def get_irating_delta(
 
 async def get_top_growers(
     category: str, days: int, limit: int, min_current_irating: int | None = None
-) -> List[Dict[str, object]]:
+) -> Dict[str, object]:
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
 
@@ -241,14 +242,24 @@ async def get_top_growers(
         )
         if not end_path or not end_used:
             logger.warning("No snapshots available for %s", category)
-            return []
+            return {
+                "results": [],
+                "start_date_used": None,
+                "end_date_used": None,
+                "snapshot_age_days": None,
+            }
 
         start_path, start_used = await _ensure_snapshot(
             category, start_date, client, fetch_if_missing=False
         )
         if not start_path or not start_used:
             logger.warning("No starting snapshot found for %s", category)
-            return []
+            return {
+                "results": [],
+                "start_date_used": None,
+                "end_date_used": None,
+                "snapshot_age_days": None,
+            }
 
         def _compute() -> List[Dict[str, object]]:
             start_map = load_snapshot_map(start_path)
@@ -295,6 +306,15 @@ async def get_top_growers(
             category,
             limit,
         )
-        return computed
+        snapshot_age_days = None
+        if start_used and end_used:
+            snapshot_age_days = (end_used - start_used).days
+
+        return {
+            "results": computed,
+            "start_date_used": start_used,
+            "end_date_used": end_used,
+            "snapshot_age_days": snapshot_age_days,
+        }
     finally:
         await client.close()

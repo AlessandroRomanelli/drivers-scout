@@ -79,10 +79,13 @@ async def leaders_growers(
 ):
     if category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
-    results = await get_top_growers(category, days, limit, min_current_irating)
+    data = await get_top_growers(category, days, limit, min_current_irating)
     return {
         "category": category,
         "days": days,
         "min_current_irating": min_current_irating,
-        "results": results,
+        "results": data.get("results", []),
+        "start_date_used": data.get("start_date_used"),
+        "end_date_used": data.get("end_date_used"),
+        "snapshot_age_days": data.get("snapshot_age_days"),
     }

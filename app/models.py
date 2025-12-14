@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, date, timezone
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -50,4 +50,15 @@ class MemberStatsSnapshot(Base):
     member: Mapped[Member] = relationship(back_populates="snapshots")
 
 
-__all__ = ["Base", "Member", "MemberStatsSnapshot"]
+class License(Base):
+    """License key issued to consumers of the service."""
+
+    __tablename__ = "licenses"
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    label: Mapped[str | None] = mapped_column(String(255))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+__all__ = ["Base", "License", "Member", "MemberStatsSnapshot"]

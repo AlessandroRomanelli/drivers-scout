@@ -1,7 +1,9 @@
 """Repository functions for database interactions."""
 from __future__ import annotations
 
+import logging
 from datetime import date
+from time import perf_counter
 from typing import Iterable, Sequence
 
 from sqlalchemy import and_, case, func, select
@@ -10,6 +12,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from .models import Member, MemberStatsSnapshot
 
+
+logger = logging.getLogger(__name__)
 
 def ensure_members(
     session: Session, members: Iterable[int | tuple[int, str | None, str | None]]
@@ -203,6 +207,17 @@ def fetch_irating_deltas_for_category(
 ) -> Sequence[dict[str, object]]:
     """Return iRating deltas for members with snapshots on or before target dates."""
 
+    logger.info(
+        "Running delta query for category=%s start=%s end=%s limit=%s min_current_irating=%s",
+        category,
+        start_date,
+        end_date,
+        limit,
+        min_current_irating,
+    )
+
+    timer_start = perf_counter()
+
     start_snapshots = (
         select(
             MemberStatsSnapshot.cust_id.label("cust_id"),
@@ -285,8 +300,15 @@ def fetch_irating_deltas_for_category(
 
     if limit:
         stmt = stmt.limit(limit)
-
-    return list(session.execute(stmt).mappings().all())
+    rows = list(session.execute(stmt).mappings().all())
+    duration = perf_counter() - timer_start
+    logger.info(
+        "Delta query returned %s rows in %.3fs for category=%s",
+        len(rows),
+        duration,
+        category,
+    )
+    return rows
 
 
 def fetch_all_cust_ids(session: Session) -> list[int]:

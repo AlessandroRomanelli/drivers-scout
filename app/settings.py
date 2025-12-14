@@ -42,6 +42,19 @@ class Settings(BaseSettings):
     http_timeout_seconds: float = Field(15.0, description="HTTP client timeout")
     rate_limit_burst: int = Field(5, description="Burst size for rate limiting")
 
+    database_url: str = Field(
+        "sqlite:///./iracing_stats.db", description="SQLAlchemy database URL"
+    )
+    license_key_length: int = Field(
+        24, ge=8, description="Length of generated license keys"
+    )
+    license_key_alphabet: str = Field(
+        "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", description="Characters used for license keys"
+    )
+    license_admin_secret: str | None = Field(
+        None, description="Shared secret required for admin license endpoints"
+    )
+
     model_config = SettingsConfigDict(
         env_file=(Path(__file__).parent.parent / ".env"),
         env_file_encoding="utf-8",

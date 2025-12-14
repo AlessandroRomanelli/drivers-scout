@@ -1,5 +1,6 @@
 import os
 import shutil
+import os
 import tempfile
 import unittest
 from datetime import date, timedelta
@@ -9,6 +10,7 @@ os.environ.setdefault("SNAPSHOTS_DIR", tempfile.mkdtemp(prefix="drivers-scout-te
 os.environ.setdefault("IRACING_USERNAME", "user")
 os.environ.setdefault("IRACING_PASSWORD", "pass")
 os.environ.setdefault("IRACING_CLIENT_SECRET", "secret")
+os.environ.setdefault("DATABASE_URL", "sqlite:///./drivers-scout-test.db")
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

@@ -10,7 +10,9 @@ from zoneinfo import ZoneInfo
 
 from fastapi.concurrency import run_in_threadpool
 
+from .db import engine
 from .iracing_client import IRacingClient
+from .models import Base
 from .snapshots import (
     find_closest_snapshot,
     load_snapshot_map,
@@ -24,8 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 def init_db() -> None:
-    """Placeholder for legacy database initialization."""
-    logger.info("Database initialization skipped; using filesystem snapshots")
+    """Initialize database tables for ORM models."""
+
+    logger.info("Creating database tables if they do not exist")
+    Base.metadata.create_all(engine)
 
 
 async def _download_snapshot(category: str, snapshot_date: date, client: IRacingClient) -> Path:

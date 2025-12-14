@@ -4,8 +4,17 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
+from sqlalchemy.orm import Session
 
+from .db import get_session
+from .license_repository import (
+    activate_license,
+    create_unique_license,
+    license_to_dict,
+    list_licenses,
+    revoke_license,
+)
 from .services import (
     fetch_and_store,
     get_history,
@@ -18,6 +27,17 @@ from .settings import settings
 router = APIRouter()
 
 
+def _require_admin(admin_secret: str | None = Header(None, alias="X-Admin-Secret")) -> None:
+    configured = settings.license_admin_secret
+    if configured and admin_secret != configured:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
+
+def _get_db_session() -> Session:
+    with get_session() as session:
+        yield session
+
+
 @router.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
@@ -27,6 +47,50 @@ async def health() -> dict:
 async def run_fetch_now():
     counts = await fetch_and_store()
     return {"counts": counts}
+
+
+@router.post("/admin/licenses", dependencies=[Depends(_require_admin)])
+def issue_license(
+    label: str | None = Body(None, embed=True), session: Session = Depends(_get_db_session)
+):
+    record = create_unique_license(
+        session,
+        length=settings.license_key_length,
+        alphabet=settings.license_key_alphabet,
+        label=label,
+    )
+    return license_to_dict(record)
+
+
+@router.get("/admin/licenses", dependencies=[Depends(_require_admin)])
+def list_license_records(
+    include_inactive: bool = Query(False),
+    session: Session = Depends(_get_db_session),
+):
+    records = list_licenses(session, include_inactive=include_inactive)
+    return [license_to_dict(record) for record in records]
+
+
+@router.post("/admin/licenses/{license_key}/revoke", dependencies=[Depends(_require_admin)])
+def revoke_license_key(
+    license_key: str, session: Session = Depends(_get_db_session)
+):
+    record = revoke_license(session, key=license_key)
+    if not record:
+        raise HTTPException(status_code=404, detail="License not found")
+    return license_to_dict(record)
+
+
+@router.post(
+    "/admin/licenses/{license_key}/activate", dependencies=[Depends(_require_admin)]
+)
+def activate_license_key(
+    license_key: str, session: Session = Depends(_get_db_session)
+):
+    record = activate_license(session, key=license_key)
+    if not record:
+        raise HTTPException(status_code=404, detail="License not found")
+    return license_to_dict(record)
 
 
 @router.get("/members/{cust_id}/latest")

@@ -1,15 +1,17 @@
 import os
+import asyncio
+import os
 import shutil
 import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
-import asyncio
 
 os.environ.setdefault("SNAPSHOTS_DIR", tempfile.mkdtemp(prefix="drivers-scout-test-services-"))
 os.environ.setdefault("IRACING_USERNAME", "user")
 os.environ.setdefault("IRACING_PASSWORD", "pass")
 os.environ.setdefault("IRACING_CLIENT_SECRET", "secret")
+os.environ.setdefault("DATABASE_URL", "sqlite:///./drivers-scout-test.db")
 
 from app.services import get_irating_delta, get_top_growers
 

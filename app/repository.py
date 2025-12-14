@@ -6,7 +6,7 @@ from datetime import date
 from time import perf_counter
 from typing import Iterable, Sequence
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, select, true
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, selectinload
 
@@ -218,53 +218,133 @@ def fetch_irating_deltas_for_category(
 
     timer_start = perf_counter()
 
-    start_snapshots = (
-        select(
-            MemberStatsSnapshot.cust_id.label("cust_id"),
-            MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
-            case(
-                (MemberStatsSnapshot.irating == -1, 1500),
-                else_=MemberStatsSnapshot.irating,
-            ).label("irating"),
-            func.row_number()
-            .over(
-                partition_by=MemberStatsSnapshot.cust_id,
-                order_by=MemberStatsSnapshot.snapshot_date.desc(),
-            )
-            .label("row_num"),
-        )
-        .where(
-            and_(
-                MemberStatsSnapshot.category == category,
-                MemberStatsSnapshot.snapshot_date <= start_date,
-            )
-        )
-        .cte("start_snapshots")
-    )
+    bind = session.get_bind()
+    supports_lateral = bool(getattr(bind.dialect, "supports_lateral", False)) if bind else False
 
-    end_snapshots = (
-        select(
-            MemberStatsSnapshot.cust_id.label("cust_id"),
-            MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
-            MemberStatsSnapshot.irating.label("irating"),
-            func.row_number()
-            .over(
-                partition_by=MemberStatsSnapshot.cust_id,
-                order_by=MemberStatsSnapshot.snapshot_date.desc(),
+    if supports_lateral:
+        cust_ids = (
+            select(MemberStatsSnapshot.cust_id)
+            .where(
+                and_(
+                    MemberStatsSnapshot.category == category,
+                    MemberStatsSnapshot.snapshot_date <= end_date,
+                )
             )
-            .label("row_num"),
+            .distinct()
+            .subquery()
         )
-        .where(
-            and_(
-                MemberStatsSnapshot.category == category,
-                MemberStatsSnapshot.snapshot_date <= end_date,
-            )
-        )
-        .cte("end_snapshots")
-    )
 
-    start_latest = select(start_snapshots).where(start_snapshots.c.row_num == 1).subquery()
-    end_latest = select(end_snapshots).where(end_snapshots.c.row_num == 1).subquery()
+        start_latest = (
+            select(
+                MemberStatsSnapshot.cust_id.label("cust_id"),
+                MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
+                case(
+                    (MemberStatsSnapshot.irating == -1, 1500),
+                    else_=MemberStatsSnapshot.irating,
+                ).label("irating"),
+            )
+            .where(
+                and_(
+                    MemberStatsSnapshot.cust_id == cust_ids.c.cust_id,
+                    MemberStatsSnapshot.category == category,
+                    MemberStatsSnapshot.snapshot_date <= start_date,
+                )
+            )
+            .order_by(MemberStatsSnapshot.snapshot_date.desc())
+            .limit(1)
+            .lateral("start_latest")
+        )
+
+        end_latest = (
+            select(
+                MemberStatsSnapshot.cust_id.label("cust_id"),
+                MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
+                MemberStatsSnapshot.irating.label("irating"),
+            )
+            .where(
+                and_(
+                    MemberStatsSnapshot.cust_id == cust_ids.c.cust_id,
+                    MemberStatsSnapshot.category == category,
+                    MemberStatsSnapshot.snapshot_date <= end_date,
+                )
+            )
+            .order_by(MemberStatsSnapshot.snapshot_date.desc())
+            .limit(1)
+            .lateral("end_latest")
+        )
+
+        from_clause = (cust_ids, start_latest, end_latest)
+    else:
+        start_dates = (
+            select(
+                MemberStatsSnapshot.cust_id.label("cust_id"),
+                func.max(MemberStatsSnapshot.snapshot_date).label("snapshot_date"),
+            )
+            .where(
+                and_(
+                    MemberStatsSnapshot.category == category,
+                    MemberStatsSnapshot.snapshot_date <= start_date,
+                )
+            )
+            .group_by(MemberStatsSnapshot.cust_id)
+            .subquery("start_dates")
+        )
+
+        end_dates = (
+            select(
+                MemberStatsSnapshot.cust_id.label("cust_id"),
+                func.max(MemberStatsSnapshot.snapshot_date).label("snapshot_date"),
+            )
+            .where(
+                and_(
+                    MemberStatsSnapshot.category == category,
+                    MemberStatsSnapshot.snapshot_date <= end_date,
+                )
+            )
+            .group_by(MemberStatsSnapshot.cust_id)
+            .subquery("end_dates")
+        )
+
+        start_latest = (
+            select(
+                MemberStatsSnapshot.cust_id.label("cust_id"),
+                MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
+                case(
+                    (MemberStatsSnapshot.irating == -1, 1500),
+                    else_=MemberStatsSnapshot.irating,
+                ).label("irating"),
+            )
+            .join(
+                start_dates,
+                and_(
+                    MemberStatsSnapshot.cust_id == start_dates.c.cust_id,
+                    MemberStatsSnapshot.snapshot_date == start_dates.c.snapshot_date,
+                ),
+            )
+            .where(MemberStatsSnapshot.category == category)
+            .subquery("start_latest")
+        )
+
+        end_latest = (
+            select(
+                MemberStatsSnapshot.cust_id.label("cust_id"),
+                MemberStatsSnapshot.snapshot_date.label("snapshot_date"),
+                MemberStatsSnapshot.irating.label("irating"),
+            )
+            .join(
+                end_dates,
+                and_(
+                    MemberStatsSnapshot.cust_id == end_dates.c.cust_id,
+                    MemberStatsSnapshot.snapshot_date == end_dates.c.snapshot_date,
+                ),
+            )
+            .where(MemberStatsSnapshot.category == category)
+            .subquery("end_latest")
+        )
+
+        from_clause = start_latest.join(
+            end_latest, start_latest.c.cust_id == end_latest.c.cust_id
+        )
 
     delta_expression = end_latest.c.irating - start_latest.c.irating
     percent_change_expression = delta_expression * 100.0 / func.nullif(start_latest.c.irating, 0)
@@ -279,12 +359,7 @@ def fetch_irating_deltas_for_category(
             delta_expression.label("delta"),
             percent_change_expression.label("percent_change"),
         )
-        .select_from(
-            start_latest.join(
-                end_latest,
-                start_latest.c.cust_id == end_latest.c.cust_id,
-            )
-        )
+        .select_from(from_clause)
         .where(
             and_(
                 start_latest.c.irating.is_not(None),

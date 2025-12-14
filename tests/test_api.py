@@ -1,12 +1,11 @@
 import os
+import shutil
 import tempfile
 import unittest
-from datetime import datetime, date, timezone
+from datetime import date, timedelta
 from pathlib import Path
 
-# Ensure configuration values exist before importing application modules
-_temp_dir = tempfile.mkdtemp(prefix="drivers-scout-test-")
-os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_temp_dir) / 'api.db'}")
+os.environ.setdefault("SNAPSHOTS_DIR", tempfile.mkdtemp(prefix="drivers-scout-test-api-"))
 os.environ.setdefault("IRACING_USERNAME", "user")
 os.environ.setdefault("IRACING_PASSWORD", "pass")
 os.environ.setdefault("IRACING_CLIENT_SECRET", "secret")
@@ -15,53 +14,63 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import router
-from app.db import SessionLocal, engine
-from app.models import Base, Member, MemberStatsSnapshot
 
 
-class MemberSnapshotApiTests(unittest.TestCase):
+class GrowersApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.app = FastAPI()
         cls.app.include_router(router)
         cls.client = TestClient(cls.app)
+        cls.snapshots_dir = Path(os.environ["SNAPSHOTS_DIR"]) / "sports_car"
 
     def setUp(self) -> None:
-        Base.metadata.drop_all(bind=engine)
-        Base.metadata.create_all(bind=engine)
-        self.session = SessionLocal()
-        member = Member(cust_id=123, display_name="Speedy Racer", location="USA")
-        snapshot = MemberStatsSnapshot(
-            cust_id=123,
-            category="sports_car",
-            snapshot_date=date(2024, 7, 1),
-            fetched_at=datetime(2024, 7, 1, tzinfo=timezone.utc),
-            irating=2500,
-            starts=10,
-            wins=2,
+        if self.snapshots_dir.exists():
+            shutil.rmtree(self.snapshots_dir)
+        self.snapshots_dir.mkdir(parents=True, exist_ok=True)
+        self.end_date = date.today()
+        self.start_date = self.end_date - timedelta(days=10)
+        self._write_csv(
+            self.start_date,
+            [
+                ["CUSTID", "DRIVER", "LOCATION", "IRATING", "STARTS", "WINS"],
+                ["1", "Driver One", "USA", "1500", "10", "1"],
+                ["2", "Driver Two", "UK", "1200", "5", "0"],
+            ],
         )
-        self.session.add_all([member, snapshot])
-        self.session.commit()
+        self._write_csv(
+            self.end_date,
+            [
+                ["CUSTID", "DRIVER", "LOCATION", "IRATING", "STARTS", "WINS"],
+                ["1", "Driver One", "USA", "1700", "20", "2"],
+                ["2", "Driver Two", "UK", "1250", "10", "1"],
+            ],
+        )
 
     def tearDown(self) -> None:
-        self.session.close()
+        shutil.rmtree(self.snapshots_dir, ignore_errors=True)
 
-    def test_latest_member_snapshot_includes_member_details(self) -> None:
-        response = self.client.get("/members/123/latest", params={"category": "sports_car"})
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["driver"], "Speedy Racer")
-        self.assertEqual(data["location"], "USA")
-        self.assertEqual(data["irating"], 2500)
+    def _write_csv(self, snapshot_date: date, rows: list[list[str]]) -> None:
+        path = self.snapshots_dir / f"{snapshot_date.isoformat()}.csv"
+        content = "\n".join([",".join(row) for row in rows])
+        path.write_text(content, encoding="utf-8")
 
-    def test_history_includes_member_details(self) -> None:
-        response = self.client.get("/members/123/history", params={"category": "sports_car"})
+    def test_leaders_endpoint_returns_growth(self) -> None:
+        response = self.client.get(
+            "/leaders/growers",
+            params={"category": "sports_car", "days": 10, "limit": 5},
+        )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(len(payload), 1)
-        self.assertEqual(payload[0]["driver"], "Speedy Racer")
-        self.assertEqual(payload[0]["location"], "USA")
-        self.assertEqual(payload[0]["starts"], 10)
+        self.assertEqual(payload["category"], "sports_car")
+        self.assertEqual(payload["start_date_used"], self.start_date.isoformat())
+        self.assertEqual(payload["end_date_used"], self.end_date.isoformat())
+        self.assertEqual(payload["snapshot_age_days"], (self.end_date - self.start_date).days)
+        results = payload["results"]
+        self.assertEqual([r["cust_id"] for r in results], [1, 2])
+        self.assertEqual(results[0]["delta"], 200)
+        self.assertEqual(results[0]["start_value"], 1500)
+        self.assertEqual(results[0]["end_value"], 1700)
 
 
 if __name__ == "__main__":

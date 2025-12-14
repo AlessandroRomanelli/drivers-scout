@@ -140,4 +140,5 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-iracing_stats.db
+*.db
+snapshots

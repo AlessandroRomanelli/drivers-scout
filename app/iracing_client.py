@@ -197,6 +197,20 @@ class IRacingClient:
                         )
                     yield row
 
+    async def download_category_csv(self, category: str) -> str:
+        """Return the full CSV content for a category."""
+
+        data_url = DATA_URL_TEMPLATE.format(category=category)
+        logger.info("Starting full CSV download for category %s", category)
+        category_resp = await self._authorized_get(data_url)
+        link = category_resp.json().get("link")
+        if not link:
+            raise RuntimeError("Missing CSV link in response")
+        csv_resp = await self._client.get(link)
+        csv_resp.raise_for_status()
+        logger.info("Completed CSV download for category %s", category)
+        return csv_resp.text
+
     async def close(self) -> None:
         await self._client.aclose()
 

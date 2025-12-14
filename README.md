@@ -5,7 +5,7 @@ A small FastAPI service that archives iRacing member statistics daily and expose
 ## Features
 - Daily scheduled fetch at configurable time and timezone.
 - OAuth password_limited login with refresh handling.
-- SQLite by default (Postgres ready via `DATABASE_URL`).
+- CSV snapshots stored on disk by date instead of a database.
 - REST endpoints for latest snapshot, history, deltas, and top growers.
 - One-off fetch CLI.
 
@@ -17,16 +17,16 @@ A small FastAPI service that archives iRacing member statistics daily and expose
 
 ## Configuration
 Environment variables (via `.env`):
-- `APP_TIMEZONE` (default `Europe/Zurich`)
-- `SCHEDULE_HOUR`, `SCHEDULE_MINUTE` (daily run time)
+- `APP_TIMEZONE` (default `UTC`)
+- `SCHEDULE_HOUR`, `SCHEDULE_MINUTE` (daily run time, default `23:55 UTC`)
 - `SCHEDULER_ENABLED` (set `false` to disable during local dev)
-- `DATABASE_URL` (e.g., `sqlite:///./iracing_stats.db`)
+- `SNAPSHOTS_DIR` root directory for downloaded CSVs
 - `IRACING_USERNAME`, `IRACING_PASSWORD` (opaque string), `IRACING_CLIENT_SECRET`
 - `IRACING_CLIENT_ID` (default `ar-pwlimited`), `IRACING_SCOPE` (default `iracing.auth`)
 - `IRACING_RATE_LIMIT_RPM`, `RATE_LIMIT_BURST`
 - `CATEGORIES` comma-separated categories (default `sports_car`)
 
-All members returned by the iRacing category CSV are ingested; no manual filtering is required.
+All members returned by the iRacing category CSV are written to dated CSV files; no manual filtering is required.
 
 Tokens are cached in memory. Refresh is attempted when expiry nears or on 401 responses; if refresh fails, a new login is issued. The token endpoint currently accepts `grant_type=refresh_token` with the `refresh_token` plus client credentials.
 
@@ -53,6 +53,6 @@ curl "http://localhost:8000/leaders/growers?category=sports_car&days=30&limit=10
 ```
 
 ## Notes
-- Tables are created automatically on startup; Alembic can be added later for migrations.
+- Snapshots are written as `{YYYY-MM-DD}.csv` files beneath `SNAPSHOTS_DIR/<category>`.
 - Scheduler uses APScheduler with the configured timezone.
 - Logging avoids sensitive credential data.

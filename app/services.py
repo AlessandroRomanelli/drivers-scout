@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Sequence
 from zoneinfo import ZoneInfo
 
+from fastapi.concurrency import run_in_threadpool
+
 from .db import get_session
 from .iracing_client import IRacingClient, normalize_rows
 from .models import Base
@@ -172,22 +174,25 @@ def get_irating_delta(
         }
 
 
-def get_top_growers(
+async def get_top_growers(
     category: str, days: int, limit: int, min_current_irating: int | None = None
 ) -> List[Dict[str, object]]:
-    """Return top growers by iRating delta for tracked members."""
+    """Return top growers by iRating delta for tracked members without blocking."""
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
 
-    with get_session() as session:
-        deltas = fetch_irating_deltas_for_category(
-            session,
-            category=category,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit,
-            min_current_irating=min_current_irating,
-        )
+    def _fetch_deltas() -> Sequence[dict[str, object]]:
+        with get_session() as session:
+            return fetch_irating_deltas_for_category(
+                session,
+                category=category,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit,
+                min_current_irating=min_current_irating,
+            )
+
+    deltas = await run_in_threadpool(_fetch_deltas)
 
     results: List[Dict[str, object]] = []
     for item in deltas:

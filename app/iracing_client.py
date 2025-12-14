@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import logging
+from time import perf_counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterable, AsyncIterator, Dict, Iterable, Iterator
@@ -47,7 +48,11 @@ class IRacingClient:
         if self._rate_reset is None:
             self._rate_reset = now + window
             self._rate_limit_lock = asyncio.Semaphore(settings.iracing_rate_limit_rpm)
+        started = perf_counter()
         await self._rate_limit_lock.acquire()
+        elapsed = perf_counter() - started
+        if elapsed > 0:
+            logger.info("Rate limit wait of %.3fs before request", elapsed)
 
     async def _post_token(self, data: Dict[str, str]) -> dict:
         for attempt in range(3):
@@ -60,6 +65,7 @@ class IRacingClient:
             except Exception:
                 if attempt == 2:
                     raise
+                logger.warning("Token request retry %s", attempt + 1)
                 await asyncio.sleep(2 ** attempt)
         return {}
 
@@ -73,9 +79,11 @@ class IRacingClient:
             "password": settings.iracing_password,
             "scope": settings.iracing_scope,
         }
+        started = perf_counter()
         token_data = await self._post_token(payload)
         token = self._build_token(token_data)
-        logger.info("Obtained new access token")
+        elapsed = perf_counter() - started
+        logger.info("Obtained new access token in %.3fs", elapsed)
         self._token = token
         return token
 
@@ -89,9 +97,11 @@ class IRacingClient:
             "client_secret": settings.iracing_client_secret,
             "scope": settings.iracing_scope,
         }
+        started = perf_counter()
         token_data = await self._post_token(payload)
         token = self._build_token(token_data)
-        logger.info("Refreshed access token")
+        elapsed = perf_counter() - started
+        logger.info("Refreshed access token in %.3fs", elapsed)
         self._token = token
         return token
 
@@ -132,6 +142,7 @@ class IRacingClient:
             except Exception:
                 if attempt == 2:
                     raise
+                logger.warning("Authorized request retry %s for %s", attempt + 1, url)
                 await asyncio.sleep(2 ** attempt)
         raise RuntimeError("Failed to fetch after retries")
 
@@ -145,16 +156,19 @@ class IRacingClient:
             except Exception:
                 if attempt == 2:
                     raise
+                logger.warning("Unauthorized request retry %s for %s", attempt + 1, url)
                 await asyncio.sleep(2 ** attempt)
         raise RuntimeError("Failed to fetch after retries")
 
     async def fetch_category_csv(self, category: str) -> AsyncIterator[Dict[str, Any]]:
         """Stream category CSV rows as dictionaries."""
         data_url = DATA_URL_TEMPLATE.format(category=category)
+        logger.info("Starting CSV link retrieval for category %s", category)
         category_resp = await self._authorized_get(data_url)
         link = category_resp.json().get("link")
         if not link:
             raise RuntimeError("Missing CSV link in response")
+        logger.info("Retrieved CSV link for category %s", category)
 
         async with self._client.stream("GET", link) as csv_resp:
             csv_resp.raise_for_status()
@@ -162,6 +176,7 @@ class IRacingClient:
             line_iter = csv_resp.aiter_lines()
 
             fieldnames: list[str] | None = None
+            row_counter = 0
             async for line in line_iter:
                 if not line:
                     continue
@@ -175,6 +190,11 @@ class IRacingClient:
                 if line == "":
                     continue
                 for row in csv.DictReader([line], fieldnames=fieldnames):
+                    row_counter += 1
+                    if row_counter % 500 == 0:
+                        logger.info(
+                            "Streamed %s rows for category %s", row_counter, category
+                        )
                     yield row
 
     async def close(self) -> None:

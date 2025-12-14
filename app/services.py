@@ -42,6 +42,7 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
     counts: Dict[str, int] = {}
 
     async def process_category(cat: str) -> None:
+        logger.info("Starting fetch for category %s", cat)
         rows = client.fetch_category_csv(cat)
         normalized = normalize_rows(rows)
         snapshot_day = datetime.now(tz).date()
@@ -50,6 +51,9 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
             stored = 0
 
             def persist_chunk(chunk: Sequence[Dict[str, object]]) -> int:
+                if not chunk:
+                    logger.warning("Empty chunk encountered for category %s", cat)
+                    return 0
                 chunk_members = [
                     (
                         item["cust_id"],
@@ -61,6 +65,8 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
                 ]
                 if chunk_members:
                     ensure_members(session, chunk_members)
+                else:
+                    logger.warning("Chunk missing members for category %s", cat)
 
                 snapshots = [
                     {
@@ -75,12 +81,23 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
                     for item in chunk
                     if item.get("cust_id") is not None
                 ]
-                return upsert_snapshots(session, snapshots)
+                stored_count = upsert_snapshots(session, snapshots)
+                logger.info(
+                    "Persisted chunk of %s rows (%s total) for category %s",
+                    len(chunk),
+                    stored + stored_count,
+                    cat,
+                )
+                return stored_count
 
             buffer: List[Dict[str, object]] = []
             batch_size = 300
+            processed = 0
             async for item in normalized:
                 buffer.append(item)
+                processed += 1
+                if processed % 500 == 0:
+                    logger.info("Processed %s normalized rows for category %s", processed, cat)
                 if len(buffer) >= batch_size:
                     stored += persist_chunk(buffer)
                     buffer = []
@@ -88,7 +105,7 @@ async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
                 stored += persist_chunk(buffer)
 
             counts[cat] = stored
-        logger.info("Stored %s snapshots for category %s", stored, cat)
+        logger.info("Completed fetch for category %s with %s snapshots", cat, stored)
 
     try:
         await asyncio.gather(*(process_category(cat) for cat in target_categories))

@@ -166,7 +166,5 @@ async def leaders_growers(
         "category": category,
         "min_current_irating": min_current_irating,
         "results": data.get("results", []),
-        "start_date_used": data.get("start_date_used"),
-        "end_date_used": data.get("end_date_used"),
         "snapshot_age_days": data.get("snapshot_age_days"),
     }

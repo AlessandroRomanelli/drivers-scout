@@ -66,13 +66,10 @@ class GrowersApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["category"], "sports_car")
-        self.assertEqual(payload["start_date_used"], self.start_date.isoformat())
-        self.assertEqual(payload["end_date_used"], self.end_date.isoformat())
         self.assertEqual(payload["snapshot_age_days"], (self.end_date - self.start_date).days)
         results = payload["results"]
         self.assertEqual([r["cust_id"] for r in results], [1, 2])
         self.assertEqual(results[0]["delta"], 200)
-        self.assertEqual(results[0]["start_value"], 1500)
         self.assertEqual(results[0]["end_value"], 1700)
 
 

@@ -246,24 +246,14 @@ async def get_top_growers(
         )
         if not end_path or not end_used:
             logger.warning("No snapshots available for %s", category)
-            return {
-                "results": [],
-                "start_date_used": None,
-                "end_date_used": None,
-                "snapshot_age_days": None,
-            }
+            return {"results": [], "snapshot_age_days": None}
 
         start_path, start_used = await _ensure_snapshot(
             category, start_date, client, fetch_if_missing=False
         )
         if not start_path or not start_used:
             logger.warning("No starting snapshot found for %s", category)
-            return {
-                "results": [],
-                "start_date_used": None,
-                "end_date_used": None,
-                "snapshot_age_days": None,
-            }
+            return {"results": [], "snapshot_age_days": None}
 
         def _compute() -> List[Dict[str, object]]:
             start_map = load_snapshot_map(start_path)
@@ -290,9 +280,6 @@ async def get_top_growers(
                     {
                         "cust_id": cust_id,
                         "category": category,
-                        "start_date_used": start_used,
-                        "end_date_used": end_used,
-                        "start_value": normalized_start,
                         "end_value": end_ir,
                         "delta": delta,
                         "percent_change": percent_change,
@@ -314,11 +301,6 @@ async def get_top_growers(
         if start_used and end_used:
             snapshot_age_days = (end_used - start_used).days
 
-        return {
-            "results": computed,
-            "start_date_used": start_used,
-            "end_date_used": end_used,
-            "snapshot_age_days": snapshot_age_days,
-        }
+        return {"results": computed, "snapshot_age_days": snapshot_age_days}
     finally:
         await client.close()

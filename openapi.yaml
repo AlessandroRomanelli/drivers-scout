@@ -165,16 +165,6 @@ components:
           type: integer
         category:
           type: string
-        start_date_used:
-          type: string
-          format: date
-          nullable: true
-        end_date_used:
-          type: string
-          format: date
-          nullable: true
-        start_value:
-          type: integer
         end_value:
           type: integer
         delta:
@@ -189,7 +179,7 @@ components:
         location:
           type: string
           nullable: true
-      required: [cust_id, category, start_value, end_value, delta]
+      required: [cust_id, category, end_value, delta]
     TopGrowersResponse:
       type: object
       properties:
@@ -202,14 +192,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TopGrowerEntry'
-        start_date_used:
-          type: string
-          format: date
-          nullable: true
-        end_date_used:
-          type: string
-          format: date
-          nullable: true
         snapshot_age_days:
           type: integer
           nullable: true

@@ -233,6 +233,16 @@ paths:
     post:
       summary: Trigger an immediate snapshot fetch
       description: Fetches the configured category snapshots for today and stores them locally.
+      security:
+        - AdminSecretAuth: []
+      parameters:
+        - in: query
+          name: category
+          required: false
+          schema:
+            type: string
+            enum: [sports_car, formula_car]
+          description: Category to fetch. Defaults to configured categories when omitted.
       responses:
         '200':
           description: Fetch completed.

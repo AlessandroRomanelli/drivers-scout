@@ -323,8 +323,6 @@ async def get_top_growers(
                 def _to_int(value: object) -> int:
                     return value if isinstance(value, int) else 0
 
-                start_starts = _to_int(start_row.get("starts"))
-                start_wins = _to_int(start_row.get("wins"))
                 end_starts = _to_int(end_row.get("starts"))
                 end_wins = _to_int(end_row.get("wins"))
 
@@ -337,8 +335,8 @@ async def get_top_growers(
                         "percent_change": percent_change,
                         "driver": end_row.get("display_name"),
                         "location": end_row.get("location"),
-                        "starts": end_starts - start_starts,
-                        "wins": end_wins - start_wins,
+                        "starts": end_starts,
+                        "wins": end_wins,
                     }
                 )
             results.sort(key=lambda item: item["delta"], reverse=True)

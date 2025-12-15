@@ -62,8 +62,11 @@ def license_status(license_key: str, session: Session = Depends(_get_db_session)
 
 
 @public_router.post("/admin/run-fetch", dependencies=[Depends(_require_admin)])
-async def run_fetch_now():
-    counts = await fetch_and_store()
+async def run_fetch_now(category: str | None = Query(None)):
+    if category is not None and category not in settings.categories_normalized:
+        raise HTTPException(status_code=400, detail="Unsupported category")
+
+    counts = await fetch_and_store(category)
     return {"counts": counts}
 
 

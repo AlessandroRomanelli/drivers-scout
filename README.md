@@ -45,7 +45,7 @@ Assuming server on http://localhost:8000
 
 ```bash
 curl http://localhost:8000/health
-curl -X POST http://localhost:8000/admin/run-fetch
+curl -X POST "http://localhost:8000/admin/run-fetch?category=sports_car"
 curl "http://localhost:8000/members/419877/latest?category=sports_car"
 curl "http://localhost:8000/members/419877/history?category=sports_car&start=2024-01-01&end=2024-02-01"
 curl "http://localhost:8000/members/419877/delta?category=sports_car&days=30"

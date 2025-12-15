@@ -61,7 +61,7 @@ def license_status(license_key: str, session: Session = Depends(_get_db_session)
     }
 
 
-@router.post("/admin/run-fetch")
+@public_router.post("/admin/run-fetch", dependencies=[Depends(_require_admin)])
 async def run_fetch_now():
     counts = await fetch_and_store()
     return {"counts": counts}

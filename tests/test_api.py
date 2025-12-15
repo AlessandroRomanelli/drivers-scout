@@ -71,6 +71,8 @@ class GrowersApiTests(unittest.TestCase):
         self.assertEqual([r["cust_id"] for r in results], [1, 2])
         self.assertEqual(results[0]["delta"], 200)
         self.assertEqual(results[0]["end_value"], 1700)
+        self.assertEqual(results[0]["starts"], 20)
+        self.assertEqual(results[0]["wins"], 2)
 
 
 if __name__ == "__main__":

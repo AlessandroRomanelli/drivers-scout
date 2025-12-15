@@ -179,6 +179,12 @@ components:
         location:
           type: string
           nullable: true
+        starts:
+          type: integer
+          nullable: true
+        wins:
+          type: integer
+          nullable: true
       required: [cust_id, category, end_value, delta]
     TopGrowersResponse:
       type: object

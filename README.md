@@ -3,7 +3,7 @@
 A small FastAPI service that archives iRacing member statistics daily and exposes historical deltas.
 
 ## Features
-- Daily scheduled fetch at configurable time and timezone.
+- Scheduled fetches four times daily at 23:55, 05:55, 11:55, and 17:55 UTC.
 - OAuth password_limited login with refresh handling.
 - CSV snapshots stored on disk by date instead of a database.
 - REST endpoints for latest snapshot, deltas, and top growers.
@@ -18,7 +18,6 @@ A small FastAPI service that archives iRacing member statistics daily and expose
 ## Configuration
 Environment variables (via `.env`):
 - `APP_TIMEZONE` (default `UTC`)
-- `SCHEDULE_HOUR`, `SCHEDULE_MINUTE` (daily run time, default `23:55 UTC`)
 - `SCHEDULER_ENABLED` (set `false` to disable during local dev)
 - `SNAPSHOTS_DIR` root directory for downloaded CSVs
 - `IRACING_USERNAME`, `IRACING_PASSWORD` (opaque string), `IRACING_CLIENT_SECRET`
@@ -53,5 +52,5 @@ curl "http://localhost:8000/leaders/growers?category=sports_car&days=30&limit=10
 
 ## Notes
 - Snapshots are written as `{YYYY-MM-DD}.csv` files beneath `SNAPSHOTS_DIR/<category>`.
-- Scheduler uses APScheduler with the configured timezone.
+- Scheduler uses APScheduler with fixed UTC schedule times.
 - Logging avoids sensitive credential data.

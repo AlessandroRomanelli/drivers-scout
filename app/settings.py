@@ -17,9 +17,7 @@ class Settings(BaseSettings):
     host: str = Field("0.0.0.0", description="Host for the HTTP server")
     port: int = Field(8000, description="Port for the HTTP server")
 
-    app_timezone: str = Field("UTC", description="Timezone for scheduling")
-    schedule_hour: int = Field(23, ge=0, le=23, description="Hour for daily job")
-    schedule_minute: int = Field(55, ge=0, le=59, description="Minute for daily job")
+    app_timezone: str = Field("UTC", description="Timezone for snapshot operations")
     scheduler_enabled: bool = Field(True, description="Toggle scheduler for local dev")
 
     snapshots_dir: Path = Field(

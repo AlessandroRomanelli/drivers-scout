@@ -15,6 +15,7 @@ from .iracing_client import IRacingClient
 from .models import Base
 from .snapshots import (
     find_closest_snapshot,
+    get_oldest_snapshot_date,
     load_snapshot_map,
     load_snapshot_rows,
     snapshot_path,
@@ -23,6 +24,25 @@ from .snapshots import (
 from .settings import settings
 
 logger = logging.getLogger(__name__)
+
+
+_top_growers_cache: dict[
+    tuple[str, date, int, int | None],
+    dict[str, object],
+] = {}
+_top_growers_cache_lock = asyncio.Lock()
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _next_cache_expiry(now: datetime | None = None) -> datetime:
+    now = now or _utcnow()
+    expiry = now.replace(hour=23, minute=55, second=0, microsecond=0)
+    if now >= expiry:
+        expiry += timedelta(days=1)
+    return expiry
 
 
 def init_db() -> None:
@@ -231,6 +251,10 @@ async def get_top_growers(
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
 
+    oldest_snapshot = get_oldest_snapshot_date(category)
+    if oldest_snapshot and start_date < oldest_snapshot:
+        start_date = oldest_snapshot
+
     logger.info(
         "Fetching top growers: category=%s days=%s limit=%s min_current_irating=%s",
         category,
@@ -238,6 +262,15 @@ async def get_top_growers(
         limit,
         min_current_irating,
     )
+
+    cache_key = (category, start_date, limit, min_current_irating)
+    now = _utcnow()
+    async with _top_growers_cache_lock:
+        cached = _top_growers_cache.get(cache_key)
+        if cached:
+            expires_at = cached.get("expires_at")
+            if isinstance(expires_at, datetime) and expires_at > now:
+                return cached["payload"]
 
     client = IRacingClient()
     try:
@@ -254,6 +287,16 @@ async def get_top_growers(
         if not start_path or not start_used:
             logger.warning("No starting snapshot found for %s", category)
             return {"results": [], "snapshot_age_days": None}
+
+        normalized_start = start_used
+        cache_key = (category, normalized_start, limit, min_current_irating)
+        now = _utcnow()
+        async with _top_growers_cache_lock:
+            cached = _top_growers_cache.get(cache_key)
+            if cached:
+                expires_at = cached.get("expires_at")
+                if isinstance(expires_at, datetime) and expires_at > now:
+                    return cached["payload"]
 
         def _compute() -> List[Dict[str, object]]:
             start_map = load_snapshot_map(start_path)
@@ -302,7 +345,19 @@ async def get_top_growers(
         snapshot_age_days = None
         if start_used and end_used:
             snapshot_age_days = (end_used - start_used).days
+        payload = {
+            "results": computed,
+            "snapshot_age_days": snapshot_age_days,
+            "start_date_used": start_used,
+            "end_date_used": end_used,
+        }
 
-        return {"results": computed, "snapshot_age_days": snapshot_age_days, "start_date_used": start_used, "end_date_used": end_used }
+        async with _top_growers_cache_lock:
+            _top_growers_cache[cache_key] = {
+                "payload": payload,
+                "expires_at": _next_cache_expiry(_utcnow()),
+            }
+
+        return payload
     finally:
         await client.close()

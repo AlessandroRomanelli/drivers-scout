@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Drivers Scout Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #0b1724; color: #f4f7fb; }
+    header, main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    h1 { color: #7dd3fc; }
+    .card { background: #12263a; border: 1px solid #1f3b57; border-radius: 10px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+    #auth, #dashboard { margin-top: 1rem; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+    input, select, button { padding: 0.65rem; border-radius: 8px; border: 1px solid #1f3b57; background: #0f1f32; color: #e2e8f0; }
+    button { cursor: pointer; background: linear-gradient(135deg, #38bdf8, #3b82f6); border: none; font-weight: bold; }
+    button:disabled { background: #1f3b57; cursor: not-allowed; }
+    .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; align-items: end; margin-bottom: 1rem; }
+    canvas { background: #0f1f32; border-radius: 10px; padding: 0.75rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { padding: 0.6rem; text-align: left; border-bottom: 1px solid #1f3b57; }
+    th { color: #7dd3fc; }
+    tr:hover { background: #0f1f32; }
+    .hidden { display: none; }
+    .status { margin-top: 0.5rem; font-size: 0.95rem; }
+    .status.ok { color: #4ade80; }
+    .status.err { color: #f87171; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Drivers Scout – Top iRating Growers</h1>
+    <p>Validate your license key to enter the dashboard, filter growers, and explore their iRating gains.</p>
+  </header>
+
+  <main>
+    <!-- License gate -->
+    <section id="auth" class="card">
+      <label for="license-input">License key</label>
+      <input id="license-input" placeholder="XXXX-XXXX-XXXX" />
+      <button id="license-check">Validate</button>
+      <div id="license-status" class="status"></div>
+    </section>
+
+    <!-- Dashboard -->
+    <section id="dashboard" class="card hidden">
+      <h2>Dashboard</h2>
+      <div class="filters">
+        <label>Category
+          <input id="category" value="sports_car" />
+        </label>
+        <label>Days
+          <input id="days" type="number" min="1" value="30" />
+        </label>
+        <label>Limit
+          <input id="limit" type="number" min="1" max="100" value="20" />
+        </label>
+        <label>Min current iRating
+          <input id="minIr" type="number" min="0" placeholder="(optional)" />
+        </label>
+        <button id="run-query">Load growers</button>
+      </div>
+
+      <canvas id="chart" height="280"></canvas>
+
+      <table id="table">
+        <thead>
+          <tr>
+            <th>#</th><th>Driver</th><th>Current iRating</th><th>Δ iRating</th>
+            <th>% Change</th><th>Starts</th><th>Wins</th><th>Location</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const licenseInput = document.getElementById('license-input');
+    const licenseCheck = document.getElementById('license-check');
+    const licenseStatus = document.getElementById('license-status');
+    const dashboard = document.getElementById('dashboard');
+    const runQuery = document.getElementById('run-query');
+    const tableBody = document.querySelector('#table tbody');
+    let licenseKey = null;
+    let chart = null;
+
+    function setStatus(msg, ok=false) {
+      licenseStatus.textContent = msg;
+      licenseStatus.className = 'status ' + (ok ? 'ok' : 'err');
+    }
+
+    async function checkLicense() {
+      const key = licenseInput.value.trim();
+      if (!key) { setStatus('Enter a license key'); return; }
+      setStatus('Checking...');
+      try {
+        const res = await fetch(`/drivers-scout/api/licenses/${encodeURIComponent(key)}/status`);
+        const data = await res.json();
+        if (data.valid && data.active) {
+          licenseKey = key;
+          dashboard.classList.remove('hidden');
+          setStatus('License active. Dashboard unlocked.', true);
+        } else {
+          dashboard.classList.add('hidden');
+          setStatus('License invalid or inactive.');
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus('Could not verify license.');
+      }
+    }
+
+    async function loadGrowers() {
+      if (!licenseKey) { setStatus('Validate a license first'); return; }
+
+      const params = new URLSearchParams();
+      params.set('category', document.getElementById('category').value || 'sports_car');
+      params.set('days', document.getElementById('days').value || 30);
+      params.set('limit', document.getElementById('limit').value || 20);
+      const minIr = document.getElementById('minIr').value;
+      if (minIr) params.set('min_current_irating', minIr);
+
+      const res = await fetch(`/drivers-scout/api/leaders/growers?${params.toString()}`, {
+        headers: { 'X-License-Key': licenseKey }
+      });
+      if (!res.ok) { alert('Request failed'); return; }
+      const data = await res.json();
+      const rows = data.results || [];
+      renderChart(rows);
+      renderTable(rows);
+    }
+
+    function renderChart(rows) {
+      const ctx = document.getElementById('chart');
+      const points = rows.map(r => ({
+        x: r.end_value,
+        y: r.delta,
+        label: r.driver || `#${r.cust_id}`,
+        data: r
+      }));
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'scatter',
+        data: { datasets: [{ label: 'Growers', data: points, backgroundColor: '#38bdf8' }] },
+        options: {
+          scales: {
+            x: { title: { display: true, text: 'Current iRating' } },
+            y: { title: { display: true, text: 'Δ iRating' } }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const d = ctx.raw.data;
+                  return [
+                    `Driver: ${d.driver || 'N/A'}`,
+                    `Current iRating: ${d.end_value}`,
+                    `Δ iRating: ${d.delta}`,
+                    `Starts: ${d.starts ?? 'N/A'}`,
+                    `Wins: ${d.wins ?? 'N/A'}`
+                  ];
+                }
+              }
+            }
+          },
+          hover: { mode: 'nearest', intersect: true }
+        }
+      });
+    }
+
+    function renderTable(rows) {
+      tableBody.innerHTML = '';
+      rows.slice(0, 20).forEach((r, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td>${r.driver || 'N/A'}</td>
+          <td>${r.end_value}</td>
+          <td>${r.delta}</td>
+          <td>${r.percent_change ? r.percent_change.toFixed(2) + '%' : '—'}</td>
+          <td>${r.starts ?? '—'}</td>
+          <td>${r.wins ?? '—'}</td>
+          <td>${r.location || '—'}</td>`;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    licenseCheck.addEventListener('click', checkLicense);
+    runQuery.addEventListener('click', loadGrowers);
+  </script>
+</body>
+</html>

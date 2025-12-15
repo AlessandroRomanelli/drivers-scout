@@ -285,6 +285,8 @@ async def get_top_growers(
                         "percent_change": percent_change,
                         "driver": end_row.get("display_name"),
                         "location": end_row.get("location"),
+                        "starts": end_row.get("starts"),
+                        "wins": end_row.get("wins"),
                     }
                 )
             results.sort(key=lambda item: item["delta"], reverse=True)

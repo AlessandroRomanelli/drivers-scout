@@ -59,6 +59,8 @@ class SnapshotComputationTests(unittest.TestCase):
         results = data["results"]
         self.assertEqual([r["cust_id"] for r in results], [11, 10])
         self.assertEqual(results[0]["delta"], 300)
+        self.assertEqual(results[0]["starts"], 0)
+        self.assertEqual(results[0]["wins"], 0)
 
     def test_irating_delta_returns_none_without_data(self) -> None:
         missing_date = self.end_date - timedelta(days=60)

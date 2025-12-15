@@ -14,6 +14,7 @@ from .settings import settings
 logger = logging.getLogger(__name__)
 
 SCHEDULE_HOURS = [23, 5, 11, 17]
+SCHEDULE_HOURS_EXPRESSION = ",".join(str(h) for h in SCHEDULE_HOURS)
 SCHEDULE_TIMEZONE = ZoneInfo("UTC")
 
 scheduler = AsyncIOScheduler(timezone=SCHEDULE_TIMEZONE)
@@ -36,7 +37,7 @@ def start_scheduler() -> None:
         logger.info("Scheduler disabled via configuration")
         return
     trigger = CronTrigger(
-        hour=SCHEDULE_HOURS,
+        hour=SCHEDULE_HOURS_EXPRESSION,
         minute=55,
         timezone=SCHEDULE_TIMEZONE,
     )
@@ -47,10 +48,13 @@ def start_scheduler() -> None:
         misfire_grace_time=None,
     )
     scheduler.start()
-    logger.info(
-        "Scheduler started for %s UTC at minute 55",
-        ", ".join(str(h).zfill(2) for h in SCHEDULE_HOURS),
-    )
+    if scheduler.running:
+        logger.info(
+            "Scheduler started for %s UTC at minute 55",
+            SCHEDULE_HOURS_EXPRESSION,
+        )
+    else:
+        logger.warning("Scheduler failed to start")
 
 
 def shutdown_scheduler() -> None:

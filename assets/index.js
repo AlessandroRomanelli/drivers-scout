@@ -159,17 +159,37 @@ function renderChart(rows) {
 
 function renderTable(rows) {
     tableBody.innerHTML = '';
+
+    const smurfRegex = /\d/; // any digit anywhere in the name
+
     rows.slice(0, 20).forEach((r, idx) => {
         const tr = document.createElement('tr');
+
+        // Podium classes (only if not smurf; smurf should win visually)
+        if (idx === 0) tr.classList.add('podium-1');
+        if (idx === 1) tr.classList.add('podium-2');
+        if (idx === 2) tr.classList.add('podium-3');
+
+        const name = (r.driver || '').trim();
+        const isSmurf = name && smurfRegex.test(name);
+
+        if (isSmurf) {
+            tr.classList.add('smurf');
+            tr.title = 'Potential Smurf';
+            // optional: remove podium styling when smurf
+            tr.classList.remove('podium-1', 'podium-2', 'podium-3');
+        }
+
         tr.innerHTML = `
-          <td>${idx + 1}</td>
-          <td>${r.driver || 'N/A'}</td>
-          <td>${r.end_value}</td>
-          <td>${r.delta}</td>
-          <td>${r.percent_change ? r.percent_change.toFixed(2) + '%' : '—'}</td>
-          <td>${r.starts ?? '—'}</td>
-          <td>${r.wins ?? '—'}</td>
-          <td>${r.location || '—'}</td>`;
+      <td>${idx + 1}</td>
+      <td>${r.driver || 'N/A'}</td>
+      <td>${r.end_value}</td>
+      <td>${r.delta}</td>
+      <td>${r.percent_change ? r.percent_change.toFixed(2) + '%' : '—'}</td>
+      <td>${r.starts ?? '—'}</td>
+      <td>${r.wins ?? '—'}</td>
+      <td>${r.location || '—'}</td>`;
+
         tableBody.appendChild(tr);
     });
 }

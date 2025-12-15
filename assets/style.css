@@ -130,3 +130,20 @@ tr:hover {
 .range-text {
     color: #e2e8f0;
 }
+
+/* Podium rows */
+tr.podium-1 td { background: rgba(255, 215, 0, 0.16); }   /* gold */
+tr.podium-2 td { background: rgba(192, 192, 192, 0.16); } /* silver */
+tr.podium-3 td { background: rgba(205, 127, 50, 0.16); }  /* bronze */
+
+/* Smurf (error theme) */
+tr.smurf td {
+    background: rgba(248, 113, 113, 0.16) !important;
+    border-bottom-color: rgba(248, 113, 113, 0.35);
+}
+tr.smurf:hover td {
+    background: rgba(248, 113, 113, 0.22) !important;
+}
+
+/* Tooltip (uses title attribute) */
+tr.smurf { cursor: help; }

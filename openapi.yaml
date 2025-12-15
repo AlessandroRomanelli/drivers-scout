@@ -109,31 +109,6 @@ components:
           type: integer
           nullable: true
       required: [cust_id, category, snapshot_date, fetched_at]
-    MemberHistoryItem:
-      type: object
-      properties:
-        snapshot_date:
-          type: string
-          format: date
-        fetched_at:
-          type: string
-          format: date-time
-        driver:
-          type: string
-          nullable: true
-        location:
-          type: string
-          nullable: true
-        irating:
-          type: integer
-          nullable: true
-        starts:
-          type: integer
-          nullable: true
-        wins:
-          type: integer
-          nullable: true
-      required: [snapshot_date, fetched_at]
     DeltaResult:
       type: object
       properties:
@@ -368,46 +343,6 @@ paths:
           description: Unsupported category.
         '404':
           description: No snapshot found.
-  /members/{cust_id}/history:
-    get:
-      summary: Historical snapshots for a member
-      security:
-        - LicenseKeyAuth: []
-        - BearerAuth: []
-      parameters:
-        - in: path
-          name: cust_id
-          required: true
-          schema:
-            type: integer
-        - in: query
-          name: category
-          schema:
-            type: string
-            default: sports_car
-        - in: query
-          name: start
-          schema:
-            type: string
-            format: date
-          description: Inclusive start date (YYYY-MM-DD). Defaults to earliest available.
-        - in: query
-          name: end
-          schema:
-            type: string
-            format: date
-          description: Inclusive end date (YYYY-MM-DD). Defaults to latest available.
-      responses:
-        '200':
-          description: Ordered snapshots within the date range.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MemberHistoryItem'
-        '400':
-          description: Unsupported category.
   /members/{cust_id}/delta:
     get:
       summary: iRating delta for a member

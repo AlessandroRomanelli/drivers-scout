@@ -5,7 +5,7 @@ import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from zoneinfo import ZoneInfo
 
 from fastapi.concurrency import run_in_threadpool
@@ -142,49 +142,6 @@ async def get_latest_snapshot(cust_id: int, category: str):
         "starts": row.get("starts"),
         "wins": row.get("wins"),
     }
-
-
-async def get_history(
-    cust_id: int,
-    category: str,
-    start: Optional[date],
-    end: Optional[date],
-) -> List[Dict[str, object]]:
-    start = start or date.min
-    end = end or date.max
-    client = IRacingClient()
-    results: List[Dict[str, object]] = []
-    try:
-        path, resolved_end = await _ensure_snapshot(
-            category, end, client, fetch_if_missing=(end == date.today())
-        )
-        if not path:
-            return []
-        directory = path.parent
-        for file_path in sorted(directory.glob("*.csv")):
-            snapshot_date = file_path.stem
-            try:
-                file_date = datetime.strptime(snapshot_date, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if not (start <= file_date <= end):
-                continue
-            for row in load_snapshot_rows(file_path):
-                if row.get("cust_id") == cust_id:
-                    results.append(
-                        {
-                            "snapshot_date": file_date,
-                            "fetched_at": datetime.now(timezone.utc),
-                            "driver": row.get("display_name"),
-                            "location": row.get("location"),
-                            "irating": row.get("irating"),
-                            "starts": row.get("starts"),
-                            "wins": row.get("wins"),
-                        }
-                    )
-        return sorted(results, key=lambda item: item["snapshot_date"])
-    finally:
-        await client.close()
 
 
 async def get_irating_delta(

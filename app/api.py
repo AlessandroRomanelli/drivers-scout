@@ -19,7 +19,6 @@ from .license_repository import (
 )
 from .services import (
     fetch_and_store,
-    get_history,
     get_irating_delta,
     get_latest_snapshot,
     get_top_growers,
@@ -122,19 +121,6 @@ async def latest_member_snapshot(cust_id: int, category: str = Query("sports_car
     if not snapshot:
         raise HTTPException(status_code=404, detail="No snapshot found")
     return snapshot
-
-
-@router.get("/members/{cust_id}/history")
-async def member_history(
-    cust_id: int,
-    category: str = Query("sports_car"),
-    start: Optional[date] = Query(None),
-    end: Optional[date] = Query(None),
-):
-    if category not in settings.categories_normalized:
-        raise HTTPException(status_code=400, detail="Unsupported category")
-    snapshots = await get_history(cust_id, category, start, end)
-    return snapshots
 
 
 @router.get("/members/{cust_id}/delta")

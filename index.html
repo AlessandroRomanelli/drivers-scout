@@ -24,6 +24,15 @@
     .status { margin-top: 0.5rem; font-size: 0.95rem; }
     .status.ok { color: #4ade80; }
     .status.err { color: #f87171; }
+    .range-header {
+      margin: 0.75rem 0 1rem 0;
+      padding: 0.75rem 1rem;
+      border: 1px solid #1f3b57;
+      border-radius: 10px;
+      background: #0f1f32;
+    }
+    .range-title { color: #7dd3fc; font-weight: bold; margin-bottom: 0.25rem; }
+    .range-text { color: #e2e8f0; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -64,6 +73,10 @@
       </div>
 
       <div id="results" hidden>
+        <header id="rangeHeader" class="range-header" hidden>
+          <div class="range-title">Time range</div>
+          <div id="rangeText" class="range-text"></div>
+        </header>
         <section style="max-height: 40vh">
           <canvas id="chart"></canvas>
         </section>
@@ -91,6 +104,32 @@
     const results = document.getElementById('results');
     let licenseKey = sessionStorage.getItem('ARMS-License-Key');
     let chart = null;
+    const rangeHeader = document.getElementById('rangeHeader');
+    const rangeText = document.getElementById('rangeText');
+    
+    function formatIsoDateHuman(isoDate) {
+      if (!isoDate) return null;
+      // "YYYY-MM-DD" -> force UTC to avoid timezone shifting
+      const d = new Date(`${isoDate}T00:00:00Z`);
+      if (Number.isNaN(d.getTime())) return null;
+      return new Intl.DateTimeFormat(navigator.language || 'en-US', {
+        year: 'numeric', month: 'long', day: '2-digit', timeZone: 'UTC'
+      }).format(d);
+    }
+    
+    function renderTimeRange(startIso, endIso) {
+      const start = formatIsoDateHuman(startIso);
+      const end = formatIsoDateHuman(endIso);
+    
+      if (!start && !end) {
+        rangeHeader.hidden = true;
+        rangeText.textContent = '';
+        return;
+      }
+    
+      rangeHeader.hidden = false;
+      rangeText.textContent = start && end ? `${start} to ${end}` : (start || end);
+    }
 
     function setStatus(msg, ok=false) {
       licenseStatus.textContent = msg;
@@ -114,6 +153,7 @@
         }
         
         const data = await res.json();
+        renderTimeRange(data.start_date_used, data.end_date_used);
         if (data.valid && data.active) {
           licenseKey = key;
           dashboard.classList.remove('hidden');

@@ -153,7 +153,6 @@
         }
         
         const data = await res.json();
-        renderTimeRange(data.start_date_used, data.end_date_used);
         if (data.valid && data.active) {
           licenseKey = key;
           dashboard.classList.remove('hidden');
@@ -195,6 +194,7 @@
         return; 
       }
       const data = await res.json();
+      renderTimeRange(data.start_date_used, data.end_date_used);
       const rows = data.results || [];
       if (rows.length) {
         results.hidden = false;

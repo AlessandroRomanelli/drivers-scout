@@ -48,6 +48,17 @@ def parse_snapshot_date(path: Path) -> date | None:
         return None
 
 
+def get_oldest_snapshot_date(category: str) -> date | None:
+    oldest: date | None = None
+    for path in list_snapshot_files(category):
+        snapshot_date = parse_snapshot_date(path)
+        if snapshot_date is None:
+            continue
+        if oldest is None or snapshot_date < oldest:
+            oldest = snapshot_date
+    return oldest
+
+
 def find_closest_snapshot(category: str, target_date: date) -> Tuple[Path | None, date | None]:
     candidates: list[tuple[int, Path, date]] = []
     for path in list_snapshot_files(category):

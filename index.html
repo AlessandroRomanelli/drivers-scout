@@ -1,99 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Drivers Scout Dashboard</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #0b1724; color: #f4f7fb; }
-    header, main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
-    main { padding-top: 0; }
-    h1 { color: #7dd3fc; }
-    .card { background: #12263a; border: 1px solid #1f3b57; border-radius: 10px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
-    #auth, #dashboard { margin-top: 1rem; }
-    label { display: flex; flex-direction: column; font-weight: bold; }
-    input, select, button { padding: 0.65rem; border-radius: 8px; border: 1px solid #1f3b57; background: #0f1f32; color: #e2e8f0; }
-    button { cursor: pointer; background: linear-gradient(135deg, #38bdf8, #3b82f6); border: none; font-weight: bold; }
-    button:disabled { background: #1f3b57; cursor: not-allowed; }
-    .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; align-items: end; margin-bottom: 1rem; }
-    canvas { background: #0f1f32; border-radius: 10px; padding: 0.75rem; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td { padding: 0.6rem; text-align: left; border-bottom: 1px solid #1f3b57; }
-    th { color: #7dd3fc; }
-    tr:hover { background: #0f1f32; }
-    .hidden { display: none; }
-    .status { margin-top: 0.5rem; font-size: 0.95rem; }
-    .status.ok { color: #4ade80; }
-    .status.err { color: #f87171; }
-    .range-header {
-      margin: 0.75rem 0 1rem 0;
-      padding: 0.75rem 1rem;
-      border: 1px solid #1f3b57;
-      border-radius: 10px;
-      background: #0f1f32;
-    }
-    .range-title { color: #7dd3fc; font-weight: bold; margin-bottom: 0.25rem; }
-    .range-text { color: #e2e8f0; }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <meta charset="UTF-8"/>
+    <title>ARMS - Drivers Scout</title>
+    <link rel="stylesheet" href="/assets/style.css"/>
+    <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <header>
+<header>
     <h1>Drivers Scout – Top iRating Gainers</h1>
-  </header>
+</header>
 
-  <main>
+<main>
     <!-- License gate -->
     <section id="auth" class="card">
-      <p>Validate your license key to enter the dashboard, filter gainers, and explore their iRating gains.</p>
-      <label for="license-input">License key</label>
-      <input id="license-input" placeholder="XXXX-XXXX-XXXX" />
-      <button id="license-check">Validate</button>
-      <div id="license-status" class="status"></div>
+        <p>Validate your license key to enter the dashboard, filter gainers, and explore their iRating gains.</p>
+        <label for="license-input">License key</label>
+        <input id="license-input" placeholder="Insert your 25 character license key here"/>
+        <button id="license-check">Validate</button>
+        <div id="license-status" class="status"></div>
     </section>
 
     <!-- Dashboard -->
     <section id="dashboard" class="card hidden">
-      <h2>Dashboard</h2>
-      <div class="filters">
-        <label>Category
-          <select id="category" value="sports_car">
-            <option value="sports_car">Sports Car</option>
-          </select>
-        </label>
-        <label>Days
-          <input id="days" type="number" min="1" value="30" />
-        </label>
-        <label>Limit
-          <input id="limit" type="number" min="1" max="100" value="20" />
-        </label>
-        <label>Min current iRating
-          <input id="minIr" type="number" min="0" placeholder="(optional)" />
-        </label>
-        <button id="run-query">Load Gainers</button>
-      </div>
+        <h2>Dashboard</h2>
+        <div class="filters">
+            <label>Category
+                <select id="category" value="sports_car">
+                    <option value="sports_car">Sports Car</option>
+                </select>
+            </label>
+            <label>Days
+                <input id="days" type="number" min="1" value="30"/>
+            </label>
+            <label>Limit
+                <input id="limit" type="number" min="1" max="100" value="20"/>
+            </label>
+            <label>Min current iRating
+                <input id="minIr" type="number" min="0" placeholder="(optional)"/>
+            </label>
+            <button id="run-query">Load Gainers</button>
+        </div>
 
-      <div id="results" hidden>
-        <header id="rangeHeader" class="range-header">
-          <div class="range-title">Time range</div>
-          <div id="rangeText" class="range-text"></div>
-        </header>
-        <section style="max-height: 40vh">
-          <canvas id="chart"></canvas>
-        </section>
-        <table id="table">
-          <thead>
-            <tr>
-              <th>#</th><th>Driver</th><th>Current iRating</th><th>Δ iRating</th>
-              <th>% Change</th><th>Starts</th><th>Wins</th><th>Location</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+        <div id="results" hidden>
+            <header id="rangeHeader" class="range-header">
+                <div class="range-title">Time range</div>
+                <div id="rangeText" class="range-text"></div>
+            </header>
+            <section style="max-height: 40vh">
+                <canvas id="chart"></canvas>
+            </section>
+            <table id="table">
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Driver</th>
+                    <th>Current iRating</th>
+                    <th>Δ iRating</th>
+                    <th>% Change</th>
+                    <th>Starts</th>
+                    <th>Wins</th>
+                    <th>Location</th>
+                </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </section>
-  </main>
+    <footer style="margin-top:2rem; padding:1rem 0; text-align:center; color:#94a3b8; font-size:0.9rem;">
+        © <span id="year"></span> AR Media Solutions. All rights reserved.
+    </footer>
+</main>
 
-  <script>
+<script>
     const auth = document.getElementById('auth')
     const licenseInput = document.getElementById('license-input');
     const licenseCheck = document.getElementById('license-check');
@@ -106,147 +86,153 @@
     let chart = null;
     const rangeHeader = document.getElementById('rangeHeader');
     const rangeText = document.getElementById('rangeText');
-    
+
     function formatIsoDateHuman(isoDate) {
-      if (!isoDate) return null;
-      // "YYYY-MM-DD" -> force UTC to avoid timezone shifting
-      const d = new Date(`${isoDate}T00:00:00Z`);
-      if (Number.isNaN(d.getTime())) return null;
-      return new Intl.DateTimeFormat(navigator.language || 'en-US', {
-        year: 'numeric', month: 'long', day: '2-digit', timeZone: 'UTC'
-      }).format(d);
-    }
-    
-    function renderTimeRange(startIso, endIso) {
-      const start = formatIsoDateHuman(startIso);
-      const end = formatIsoDateHuman(endIso);
-    
-      if (!start && !end) {
-        rangeHeader.hidden = true;
-        rangeText.textContent = '';
-        return;
-      }
-    
-      rangeHeader.hidden = false;
-      rangeText.textContent = start && end ? `${start} to ${end}` : (start || end);
+        if (!isoDate) return null;
+        // "YYYY-MM-DD" -> force UTC to avoid timezone shifting
+        const d = new Date(`${isoDate}T00:00:00Z`);
+        if (Number.isNaN(d.getTime())) return null;
+        return new Intl.DateTimeFormat(navigator.language || 'en-US', {
+            year: 'numeric', month: 'long', day: '2-digit', timeZone: 'UTC'
+        }).format(d);
     }
 
-    function setStatus(msg, ok=false) {
-      licenseStatus.textContent = msg;
-      licenseStatus.className = 'status ' + (ok ? 'ok' : 'err');
+    function renderTimeRange(startIso, endIso) {
+        const start = formatIsoDateHuman(startIso);
+        const end = formatIsoDateHuman(endIso);
+
+        if (!start && !end) {
+            rangeHeader.hidden = true;
+            rangeText.textContent = '';
+            return;
+        }
+
+        rangeHeader.hidden = false;
+        rangeText.textContent = start && end ? `${start} to ${end}` : (start || end);
+    }
+
+    function setStatus(msg, ok = false) {
+        licenseStatus.textContent = msg;
+        licenseStatus.className = 'status ' + (ok ? 'ok' : 'err');
     }
 
     async function checkLicense(key) {
-      if (!key) { setStatus('Enter a license key'); return; }
-      setStatus('Checking...');
-      try {
-        const res = await fetch(`/drivers-scout/api/licenses/${encodeURIComponent(key)}/status`);
+        if (!key) {
+            setStatus('Enter a license key');
+            return;
+        }
+        setStatus('Checking...');
+        try {
+            const res = await fetch(`/drivers-scout/api/licenses/${encodeURIComponent(key)}/status`);
 
-        if (res.status === 502) {
-          setStatus('Server not reachable. Try again later.');
-          return;
-        }
+            if (res.status === 502) {
+                setStatus('Server not reachable. Try again later.');
+                return;
+            }
 
-        if (!res.ok) {
-          setStatus('Could not verify license.');
-          return;
+            if (!res.ok) {
+                setStatus('Could not verify license.');
+                return;
+            }
+
+            const data = await res.json();
+            if (data.valid && data.active) {
+                licenseKey = key;
+                dashboard.classList.remove('hidden');
+                setStatus('License active. Dashboard unlocked.', true);
+                sessionStorage.setItem('ARMS-License-Key', key)
+                auth.hidden = true;
+            } else {
+                dashboard.classList.add('hidden');
+                setStatus('License invalid or inactive.');
+            }
+        } catch (err) {
+            console.error(err);
+            setStatus('Could not verify license.');
         }
-        
-        const data = await res.json();
-        if (data.valid && data.active) {
-          licenseKey = key;
-          dashboard.classList.remove('hidden');
-          setStatus('License active. Dashboard unlocked.', true);
-          sessionStorage.setItem('ARMS-License-Key', key)
-          auth.hidden = true;
-        } else {
-          dashboard.classList.add('hidden');
-          setStatus('License invalid or inactive.');
-        }
-      } catch (err) {
-        console.error(err);
-        setStatus('Could not verify license.');
-      }
     }
 
     function setLoading(isLoading) {
-      runQuery.disabled = isLoading
-      runQuery.innerHTML = isLoading ? "Loading..." : "Load Gainers"
+        runQuery.disabled = isLoading
+        runQuery.innerHTML = isLoading ? "Loading..." : "Load Gainers"
     }
 
     async function loadGainers() {
-      if (!licenseKey) { setStatus('Validate a license first'); return; }
-      setLoading(true)
-      console.log(document.getElementById('category').value)
-      const params = new URLSearchParams();
-      params.set('category', document.getElementById('category').value || 'sports_car');
-      params.set('days', document.getElementById('days').value || 30);
-      params.set('limit', document.getElementById('limit').value || 20);
-      const minIr = document.getElementById('minIr').value;
-      if (minIr) params.set('min_current_irating', minIr);
+        if (!licenseKey) {
+            setStatus('Validate a license first');
+            return;
+        }
+        setLoading(true)
+        console.log(document.getElementById('category').value)
+        const params = new URLSearchParams();
+        params.set('category', document.getElementById('category').value || 'sports_car');
+        params.set('days', document.getElementById('days').value || 30);
+        params.set('limit', document.getElementById('limit').value || 20);
+        const minIr = document.getElementById('minIr').value;
+        if (minIr) params.set('min_current_irating', minIr);
 
-      const res = await fetch(`/drivers-scout/api/leaders/growers?${params.toString()}`, {
-        headers: { 'X-License-Key': licenseKey }
-      });
-      if (!res.ok) { 
+        const res = await fetch(`/drivers-scout/api/leaders/growers?${params.toString()}`, {
+            headers: {'X-License-Key': licenseKey}
+        });
+        if (!res.ok) {
+            setLoading(false)
+            alert('Request failed');
+            return;
+        }
+        const data = await res.json();
+        renderTimeRange(data.start_date_used, data.end_date_used);
+        const rows = data.results || [];
+        if (rows.length) {
+            results.hidden = false;
+        }
+        renderChart(rows);
+        renderTable(rows);
         setLoading(false)
-        alert('Request failed'); 
-        return; 
-      }
-      const data = await res.json();
-      renderTimeRange(data.start_date_used, data.end_date_used);
-      const rows = data.results || [];
-      if (rows.length) {
-        results.hidden = false;
-      }
-      renderChart(rows);
-      renderTable(rows);
-      setLoading(false)
     }
 
     function renderChart(rows) {
-      const ctx = document.getElementById('chart');
-      const points = rows.map(r => ({
-        x: r.end_value,
-        y: r.delta,
-        label: r.driver || `#${r.cust_id}`,
-        data: r
-      }));
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'scatter',
-        data: { datasets: [{ label: 'Gainers', data: points, backgroundColor: '#38bdf8' }] },
-        options: {
-          scales: {
-            x: { title: { display: true, text: 'Current iRating' } },
-            y: { title: { display: true, text: 'Δ iRating' } }
-          },
-          plugins: {
-            tooltip: {
-              callbacks: {
-                label: ctx => {
-                  const d = ctx.raw.data;
-                  return [
-                    `Driver: ${d.driver || 'N/A'}`,
-                    `Current iRating: ${d.end_value}`,
-                    `Δ iRating: ${d.delta}`,
-                    `Starts: ${d.starts ?? 'N/A'}`,
-                    `Wins: ${d.wins ?? 'N/A'}`
-                  ];
-                }
-              }
+        const ctx = document.getElementById('chart');
+        const points = rows.map(r => ({
+            x: r.end_value,
+            y: r.delta,
+            label: r.driver || `#${r.cust_id}`,
+            data: r
+        }));
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+            type: 'scatter',
+            data: {datasets: [{label: 'Gainers', data: points, backgroundColor: '#38bdf8'}]},
+            options: {
+                scales: {
+                    x: {title: {display: true, text: 'Current iRating'}},
+                    y: {title: {display: true, text: 'Δ iRating'}}
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const d = ctx.raw.data;
+                                return [
+                                    `Driver: ${d.driver || 'N/A'}`,
+                                    `Current iRating: ${d.end_value}`,
+                                    `Δ iRating: ${d.delta}`,
+                                    `Starts: ${d.starts ?? 'N/A'}`,
+                                    `Wins: ${d.wins ?? 'N/A'}`
+                                ];
+                            }
+                        }
+                    }
+                },
+                hover: {mode: 'nearest', intersect: true}
             }
-          },
-          hover: { mode: 'nearest', intersect: true }
-        }
-      });
+        });
     }
 
     function renderTable(rows) {
-      tableBody.innerHTML = '';
-      rows.slice(0, 20).forEach((r, idx) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
+        tableBody.innerHTML = '';
+        rows.slice(0, 20).forEach((r, idx) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
           <td>${idx + 1}</td>
           <td>${r.driver || 'N/A'}</td>
           <td>${r.end_value}</td>
@@ -255,14 +241,16 @@
           <td>${r.starts ?? '—'}</td>
           <td>${r.wins ?? '—'}</td>
           <td>${r.location || '—'}</td>`;
-        tableBody.appendChild(tr);
-      });
+            tableBody.appendChild(tr);
+        });
     }
 
     checkLicense(licenseKey);
 
     licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.trim()));
     runQuery.addEventListener('click', loadGainers);
-  </script>
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+</script>
 </body>
 </html>

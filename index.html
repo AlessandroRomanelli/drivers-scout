@@ -95,6 +95,17 @@
       setStatus('Checking...');
       try {
         const res = await fetch(`/drivers-scout/api/licenses/${encodeURIComponent(key)}/status`);
+
+        if (res.status === 502) {
+          setStatus('Server not reachable. Try again later.');
+          return;
+        }
+
+        if (!res.ok) {
+          setStatus('Could not verify license.');
+          return;
+        }
+        
         const data = await res.json();
         if (data.valid && data.active) {
           licenseKey = key;

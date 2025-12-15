@@ -319,6 +319,15 @@ async def get_top_growers(
                 percent_change = (
                     delta * 100.0 / normalized_start if normalized_start else None
                 )
+
+                def _to_int(value: object) -> int:
+                    return value if isinstance(value, int) else 0
+
+                start_starts = _to_int(start_row.get("starts"))
+                start_wins = _to_int(start_row.get("wins"))
+                end_starts = _to_int(end_row.get("starts"))
+                end_wins = _to_int(end_row.get("wins"))
+
                 results.append(
                     {
                         "cust_id": cust_id,
@@ -328,8 +337,8 @@ async def get_top_growers(
                         "percent_change": percent_change,
                         "driver": end_row.get("display_name"),
                         "location": end_row.get("location"),
-                        "starts": end_row.get("starts"),
-                        "wins": end_row.get("wins"),
+                        "starts": end_starts - start_starts,
+                        "wins": end_wins - start_wins,
                     }
                 )
             results.sort(key=lambda item: item["delta"], reverse=True)

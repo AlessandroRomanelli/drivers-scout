@@ -6,10 +6,11 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #0b1724; color: #f4f7fb; }
     header, main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    main { padding-top: 0; }
     h1 { color: #7dd3fc; }
     .card { background: #12263a; border: 1px solid #1f3b57; border-radius: 10px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
     #auth, #dashboard { margin-top: 1rem; }
-    label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+    label { display: flex; flex-direction: column; font-weight: bold; }
     input, select, button { padding: 0.65rem; border-radius: 8px; border: 1px solid #1f3b57; background: #0f1f32; color: #e2e8f0; }
     button { cursor: pointer; background: linear-gradient(135deg, #38bdf8, #3b82f6); border: none; font-weight: bold; }
     button:disabled { background: #1f3b57; cursor: not-allowed; }
@@ -28,13 +29,13 @@
 </head>
 <body>
   <header>
-    <h1>Drivers Scout – Top iRating Growers</h1>
-    <p>Validate your license key to enter the dashboard, filter growers, and explore their iRating gains.</p>
+    <h1>Drivers Scout – Top iRating Gainers</h1>
   </header>
 
   <main>
     <!-- License gate -->
     <section id="auth" class="card">
+      <p>Validate your license key to enter the dashboard, filter gainers, and explore their iRating gains.</p>
       <label for="license-input">License key</label>
       <input id="license-input" placeholder="XXXX-XXXX-XXXX" />
       <button id="license-check">Validate</button>
@@ -46,7 +47,9 @@
       <h2>Dashboard</h2>
       <div class="filters">
         <label>Category
-          <input id="category" value="sports_car" />
+          <select id="category" value="sports_car">
+            <option value="sports_car">Sports Car</option>
+          </select>
         </label>
         <label>Days
           <input id="days" type="number" min="1" value="30" />
@@ -57,20 +60,23 @@
         <label>Min current iRating
           <input id="minIr" type="number" min="0" placeholder="(optional)" />
         </label>
-        <button id="run-query">Load growers</button>
+        <button id="run-query">Load Gainers</button>
       </div>
 
-      <canvas id="chart" height="280"></canvas>
-
-      <table id="table">
-        <thead>
-          <tr>
-            <th>#</th><th>Driver</th><th>Current iRating</th><th>Δ iRating</th>
-            <th>% Change</th><th>Starts</th><th>Wins</th><th>Location</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+      <div id="results" hidden>
+        <section style="max-height: 40vh">
+          <canvas id="chart"></canvas>
+        </section>
+        <table id="table">
+          <thead>
+            <tr>
+              <th>#</th><th>Driver</th><th>Current iRating</th><th>Δ iRating</th>
+              <th>% Change</th><th>Starts</th><th>Wins</th><th>Location</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
   </main>
 
@@ -82,6 +88,7 @@
     const dashboard = document.getElementById('dashboard');
     const runQuery = document.getElementById('run-query');
     const tableBody = document.querySelector('#table tbody');
+    const results = document.getElementById('results');
     let licenseKey = sessionStorage.getItem('ARMS-License-Key');
     let chart = null;
 
@@ -112,7 +119,7 @@
           dashboard.classList.remove('hidden');
           setStatus('License active. Dashboard unlocked.', true);
           sessionStorage.setItem('ARMS-License-Key', key)
-          auth.display = 'none';
+          auth.hidden = true;
         } else {
           dashboard.classList.add('hidden');
           setStatus('License invalid or inactive.');
@@ -123,9 +130,15 @@
       }
     }
 
-    async function loadGrowers() {
-      if (!licenseKey) { setStatus('Validate a license first'); return; }
+    function setLoading(isLoading) {
+      runQuery.disabled = isLoading
+      runQuery.innerHTML = isLoading ? "Loading..." : "Load Gainers"
+    }
 
+    async function loadGainers() {
+      if (!licenseKey) { setStatus('Validate a license first'); return; }
+      setLoading(true)
+      console.log(document.getElementById('category').value)
       const params = new URLSearchParams();
       params.set('category', document.getElementById('category').value || 'sports_car');
       params.set('days', document.getElementById('days').value || 30);
@@ -136,11 +149,19 @@
       const res = await fetch(`/drivers-scout/api/leaders/growers?${params.toString()}`, {
         headers: { 'X-License-Key': licenseKey }
       });
-      if (!res.ok) { alert('Request failed'); return; }
+      if (!res.ok) { 
+        setLoading(false)
+        alert('Request failed'); 
+        return; 
+      }
       const data = await res.json();
       const rows = data.results || [];
+      if (rows.length) {
+        results.hidden = false;
+      }
       renderChart(rows);
       renderTable(rows);
+      setLoading(false)
     }
 
     function renderChart(rows) {
@@ -154,7 +175,7 @@
       if (chart) chart.destroy();
       chart = new Chart(ctx, {
         type: 'scatter',
-        data: { datasets: [{ label: 'Growers', data: points, backgroundColor: '#38bdf8' }] },
+        data: { datasets: [{ label: 'Gainers', data: points, backgroundColor: '#38bdf8' }] },
         options: {
           scales: {
             x: { title: { display: true, text: 'Current iRating' } },
@@ -201,7 +222,7 @@
     checkLicense(licenseKey);
 
     licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.trim()));
-    runQuery.addEventListener('click', loadGrowers);
+    runQuery.addEventListener('click', loadGainers);
   </script>
 </body>
 </html>

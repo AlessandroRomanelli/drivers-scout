@@ -303,6 +303,6 @@ async def get_top_growers(
         if start_used and end_used:
             snapshot_age_days = (end_used - start_used).days
 
-        return {"results": computed, "snapshot_age_days": snapshot_age_days}
+        return {"results": computed, "snapshot_age_days": snapshot_age_days, "start_date_used": start_used, "end_date_used": end_used }
     finally:
         await client.close()

@@ -75,13 +75,14 @@
   </main>
 
   <script>
+    const auth = document.getElementById('auth')
     const licenseInput = document.getElementById('license-input');
     const licenseCheck = document.getElementById('license-check');
     const licenseStatus = document.getElementById('license-status');
     const dashboard = document.getElementById('dashboard');
     const runQuery = document.getElementById('run-query');
     const tableBody = document.querySelector('#table tbody');
-    let licenseKey = null;
+    let licenseKey = sessionStorage.getItem('ARMS-License-Key');
     let chart = null;
 
     function setStatus(msg, ok=false) {
@@ -89,8 +90,7 @@
       licenseStatus.className = 'status ' + (ok ? 'ok' : 'err');
     }
 
-    async function checkLicense() {
-      const key = licenseInput.value.trim();
+    async function checkLicense(key) {
       if (!key) { setStatus('Enter a license key'); return; }
       setStatus('Checking...');
       try {
@@ -100,6 +100,8 @@
           licenseKey = key;
           dashboard.classList.remove('hidden');
           setStatus('License active. Dashboard unlocked.', true);
+          sessionStorage.setItem('ARMS-License-Key', key)
+          auth.display = 'none';
         } else {
           dashboard.classList.add('hidden');
           setStatus('License invalid or inactive.');
@@ -185,7 +187,9 @@
       });
     }
 
-    licenseCheck.addEventListener('click', checkLicense);
+    checkLicense(licenseKey);
+
+    licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.trim()));
     runQuery.addEventListener('click', loadGrowers);
   </script>
 </body>

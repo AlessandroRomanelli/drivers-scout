@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8"/>
     <title>ARMS - Drivers Scout</title>
-    <link rel="stylesheet" href="/assets/style.css"/>
-    <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="./assets/style.css"/>
+    <link rel="icon" href="./assets/favicon.ico" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -246,7 +246,6 @@
     }
 
     checkLicense(licenseKey);
-
     licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.trim()));
     runQuery.addEventListener('click', loadGainers);
 

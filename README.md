@@ -6,7 +6,7 @@ A small FastAPI service that archives iRacing member statistics daily and expose
 - Daily scheduled fetch at configurable time and timezone.
 - OAuth password_limited login with refresh handling.
 - CSV snapshots stored on disk by date instead of a database.
-- REST endpoints for latest snapshot, history, deltas, and top growers.
+- REST endpoints for latest snapshot, deltas, and top growers.
 - One-off fetch CLI.
 
 ## Setup
@@ -47,7 +47,6 @@ Assuming server on http://localhost:8000
 curl http://localhost:8000/health
 curl -X POST "http://localhost:8000/admin/run-fetch?category=sports_car"
 curl "http://localhost:8000/members/419877/latest?category=sports_car"
-curl "http://localhost:8000/members/419877/history?category=sports_car&start=2024-01-01&end=2024-02-01"
 curl "http://localhost:8000/members/419877/delta?category=sports_car&days=30"
 curl "http://localhost:8000/leaders/growers?category=sports_car&days=30&limit=10"
 ```

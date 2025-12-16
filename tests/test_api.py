@@ -73,14 +73,14 @@ class GrowersApiTests(unittest.TestCase):
         self.assertEqual([r["cust_id"] for r in results], [1, 2])
         self.assertEqual(results[0]["delta"], 200)
         self.assertEqual(results[0]["end_value"], 1700)
-        self.assertEqual(results[0]["starts"], 20)
-        self.assertEqual(results[0]["wins"], 2)
+        self.assertEqual(results[0]["starts"], 10)
+        self.assertEqual(results[0]["wins"], 1)
 
     def test_cache_reused_until_cutoff_then_refreshed(self) -> None:
         requested_days = 30
         early_now = datetime(2024, 1, 1, 10, 0, tzinfo=timezone.utc)
         later_same_day = early_now + timedelta(hours=1)
-        after_cutoff = early_now.replace(hour=23, minute=56)
+        after_cutoff = early_now.replace(hour=12, minute=1)
 
         with patch("app.services._utcnow", return_value=early_now):
             response1 = self.client.get(

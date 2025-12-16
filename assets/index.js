@@ -1,3 +1,5 @@
+const FILTERS_STORAGE_KEY = 'drivers-scout-filters';
+
 const auth = document.getElementById('auth')
 const licenseInput = document.getElementById('license-input');
 const licenseCheck = document.getElementById('license-check');
@@ -247,9 +249,39 @@ function isoToFlagEmoji(isoCode) {
         );
 }
 
+function saveFiltersToSession() {
+    const filters = {
+        category: document.getElementById('category').value,
+        days: document.getElementById('days').value,
+        limit: document.getElementById('limit').value,
+        minIr: document.getElementById('minIr').value
+    };
+    sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+}
+
+function loadFiltersFromSession() {
+    const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+        const filters = JSON.parse(raw);
+        if (filters.category) document.getElementById('category').value = filters.category;
+        if (filters.days) document.getElementById('days').value = filters.days;
+        if (filters.limit) document.getElementById('limit').value = filters.limit;
+        if (filters.minIr !== undefined) document.getElementById('minIr').value = filters.minIr;
+    } catch (e) {
+        console.warn('Failed to load filters from session storage', e);
+    }
+}
+
 licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.trim()));
-runQuery.addEventListener('click', loadGainers);
+runQuery.addEventListener('click', () => {
+    saveFiltersToSession()
+    loadGainers()
+});
 
 document.getElementById('year').textContent = new Date().getFullYear();
 checkLicense(licenseKey);
+loadFiltersFromSession();
+
 

@@ -180,15 +180,20 @@ function renderTable(rows) {
             tr.classList.remove('podium-1', 'podium-2', 'podium-3');
         }
 
+        const flag = isoToFlagEmoji(r.location || '');
+
         tr.innerHTML = `
       <td>${idx + 1}</td>
+      <td>
+        ${flag ? `<span class="flag">${flag}</span>` : ''}
+        ${r.location || '—'}
+      </td>
       <td>${r.driver || 'N/A'}</td>
       <td>${r.end_value}</td>
       <td>${r.delta}</td>
       <td>${r.percent_change ? r.percent_change.toFixed(2) + '%' : '—'}</td>
       <td>${r.starts ?? '—'}</td>
-      <td>${r.wins ?? '—'}</td>
-      <td>${r.location || '—'}</td>`;
+      <td>${r.wins ?? '—'}</td>`;
 
         tableBody.appendChild(tr);
     });
@@ -235,6 +240,15 @@ function exportTableToCSV(filename, rows) {
 
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+}
+
+function isoToFlagEmoji(isoCode) {
+    if (!isoCode || isoCode.length !== 2) return '';
+    return isoCode
+        .toUpperCase()
+        .replace(/./g, char =>
+            String.fromCodePoint(127397 + char.charCodeAt())
+        );
 }
 
 licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.trim()));

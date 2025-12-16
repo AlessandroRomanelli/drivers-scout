@@ -147,3 +147,9 @@ tr.smurf:hover td {
 
 /* Tooltip (uses title attribute) */
 tr.smurf { cursor: help; }
+
+.flag {
+    font-size: 1.1em;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}

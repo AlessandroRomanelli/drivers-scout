@@ -154,3 +154,17 @@ tr.smurf { cursor: help; }
     margin-right: 0.35rem;
     vertical-align: middle;
 }
+
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+th.sortable::after {
+    content: ' ⇅';
+    opacity: 0.4;
+    font-size: 0.85em;
+}
+
+th.sortable.asc::after { content: ' ↑'; }
+th.sortable.desc::after { content: ' ↓'; }

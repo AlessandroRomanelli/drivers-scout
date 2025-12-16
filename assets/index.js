@@ -14,6 +14,33 @@ const rangeHeader = document.getElementById('rangeHeader');
 const rangeText = document.getElementById('rangeText');
 const exportBtn = document.getElementById('export-csv');
 
+let lastRows = [];
+let sortState = { key: null, dir: 'desc' };
+
+function sortRows(rows, key, dir) {
+    const factor = dir === 'asc' ? 1 : -1;
+
+    return [...rows].sort((a, b) => {
+        let va, vb;
+
+        if (key === 'rank') {
+            va = rows.indexOf(a);
+            vb = rows.indexOf(b);
+        } else {
+            va = a[key];
+            vb = b[key];
+        }
+
+        if (va == null) return 1;
+        if (vb == null) return -1;
+
+        if (typeof va === 'number' && typeof vb === 'number') {
+            return (va - vb) * factor;
+        }
+
+        return String(va).localeCompare(String(vb)) * factor;
+    });
+}
 
 function formatIsoDateHuman(isoDate) {
     if (!isoDate) return null;
@@ -108,6 +135,7 @@ async function loadGainers() {
         return;
     }
     const data = await res.json();
+    lastRows = data.results || []
     renderTimeRange(data.start_date_used, data.end_date_used);
     const rows = data.results || [];
     exportBtn.onclick = () => {
@@ -117,7 +145,7 @@ async function loadGainers() {
         results.hidden = false;
     }
     renderChart(rows);
-    renderTable(rows);
+    renderTable(lastRows);
     setLoading(false)
 }
 
@@ -278,6 +306,26 @@ licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.tri
 runQuery.addEventListener('click', () => {
     saveFiltersToSession()
     loadGainers()
+});
+
+document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+        const key = th.dataset.key;
+
+        // toggle direction
+        sortState.dir =
+            sortState.key === key && sortState.dir === 'desc' ? 'asc' : 'desc';
+        sortState.key = key;
+
+        // update header classes
+        document.querySelectorAll('th.sortable').forEach(h => {
+            h.classList.remove('asc', 'desc');
+        });
+        th.classList.add(sortState.dir);
+
+        const sorted = sortRows(lastRows, key, sortState.dir);
+        renderTable(sorted);
+    });
 });
 
 document.getElementById('year').textContent = new Date().getFullYear();

@@ -39,10 +39,11 @@ def _utcnow() -> datetime:
 
 def _next_cache_expiry(now: datetime | None = None) -> datetime:
     now = now or _utcnow()
-    expiry = now.replace(hour=23, minute=55, second=0, microsecond=0)
-    if now >= expiry:
-        expiry += timedelta(days=1)
-    return expiry
+    # Align cache expiry with six-hour fetch cadence (e.g. 00:00, 06:00, 12:00, 18:00)
+    current_slot_start = now.replace(
+        hour=(now.hour // 6) * 6, minute=0, second=0, microsecond=0
+    )
+    return current_slot_start + timedelta(hours=6)
 
 
 def init_db() -> None:

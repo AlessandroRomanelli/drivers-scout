@@ -149,7 +149,8 @@ tr.smurf:hover td {
 tr.smurf { cursor: help; }
 
 .flag {
-    font-size: 1.1em;
+    line-height: 1rem;
+    font-size: 1.5em;
     margin-right: 0.35rem;
     vertical-align: middle;
 }

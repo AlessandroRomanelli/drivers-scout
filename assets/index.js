@@ -184,11 +184,7 @@ function renderTable(rows) {
 
         tr.innerHTML = `
       <td>${idx + 1}</td>
-      <td>
-        ${flag ? `<span class="flag">${flag}</span>` : ''}
-        ${r.location || '—'}
-      </td>
-      <td>${r.driver || 'N/A'}</td>
+      <td>${flag ? `<span class="flag">${flag}</span>` : ''} ${r.driver || 'N/A'}</td>
       <td>${r.end_value}</td>
       <td>${r.delta}</td>
       <td>${r.percent_change ? r.percent_change.toFixed(2) + '%' : '—'}</td>

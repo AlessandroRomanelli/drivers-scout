@@ -97,15 +97,14 @@ def sync_members_from_snapshots() -> int:
         session.execute(
             text(
                 """
-                INSERT INTO members (cust_id, display_name, location)
-                SELECT s.cust_id, s.display_name, s.location
-                FROM member_staging s
-                ON CONFLICT(cust_id) DO UPDATE SET
-                    display_name = COALESCE(excluded.display_name, members.display_name),
-                    location = COALESCE(excluded.location, members.location)
+                 INSERT OR IGNORE INTO members (cust_id, display_name, location)
+                        SELECT cust_id, display_name, location
+                        FROM member_staging;
                 """
             )
         )
+
+        session.commit()
 
     logger.info(
         "Member sync from snapshots complete. Upserted %s members",

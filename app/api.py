@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from .auth import require_license
 from .db import get_session
-from .models import License
+from .models import License, Member
 from .license_repository import (
     activate_license,
     create_unique_license,
@@ -111,6 +111,41 @@ def activate_license_key(
     if not record:
         raise HTTPException(status_code=404, detail="License not found")
     return license_to_dict(record)
+
+
+@router.get("/members/search")
+def search_members(
+    q: str = Query(..., min_length=3, description="Partial member display name"),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(_get_db_session),
+):
+    term = q.strip()
+    if len(term) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Query must be at least 3 characters",
+        )
+
+    query = (
+        session.query(Member)
+        .filter(Member.display_name.isnot(None))
+        .filter(Member.display_name.ilike(f"%{term}%"))
+        .order_by(Member.display_name.asc())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    results = [
+        {
+            "cust_id": member.cust_id,
+            "display_name": member.display_name,
+            "location": member.location,
+        }
+        for member in query.all()
+    ]
+
+    return {"query": term, "limit": limit, "offset": offset, "results": results}
 
 
 @router.get("/members/{cust_id}/latest")

@@ -49,10 +49,10 @@ def _latest_snapshot_for_category(category: str) -> Path | None:
     return latest_path
 
 
-def sync_members_from_snapshots() -> dict[str, int]:
+def sync_members_from_snapshots() -> int:
     """Ensure Member rows exist using the latest snapshots for each category."""
 
-    members: dict[str, dict[str, object]] = {}
+    members: dict[int, dict[str, object]] = {}
     for category in settings.categories_normalized:
         path = _latest_snapshot_for_category(category)
         if not path:
@@ -109,13 +109,13 @@ def sync_members_from_snapshots() -> dict[str, int]:
 
     logger.info(
         "Member sync from snapshots complete. Upserted %s members",
-        members.size()
+        len(members)
     )
 
-    return members.size()
+    return len(members)
 
 
-async def sync_members_from_snapshots_async() -> dict[str, int]:
+async def sync_members_from_snapshots_async() -> int:
     """Async wrapper for member sync."""
 
     return await run_in_threadpool(sync_members_from_snapshots)

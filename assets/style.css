@@ -148,11 +148,13 @@ tr.smurf:hover td {
 /* Tooltip (uses title attribute) */
 tr.smurf { cursor: help; }
 
+.driver {
+    display: flex;
+    align-items: center;
+}
+
 .flag {
-    line-height: 1rem;
-    font-size: 1.5em;
-    margin-right: 0.35rem;
-    vertical-align: middle;
+    margin-right: 0.5rem;
 }
 
 th.sortable {

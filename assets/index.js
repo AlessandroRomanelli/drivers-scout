@@ -118,7 +118,6 @@ async function loadGainers() {
         return;
     }
     setLoading(true)
-    console.log(document.getElementById('category').value)
     const params = new URLSearchParams();
     params.set('category', document.getElementById('category').value || 'sports_car');
     params.set('days', document.getElementById('days').value || 30);
@@ -210,11 +209,15 @@ function renderTable(rows) {
             tr.classList.remove('podium-1', 'podium-2', 'podium-3');
         }
 
-        const flag = isoToFlagEmoji(r.location || '');
+        const flag = r.location.toLowerCase()
 
         tr.innerHTML = `
       <td>${idx + 1}</td>
-      <td>${flag ? `<span class="flag">${flag}</span>` : ''} ${r.driver || 'N/A'}</td>
+      <td><div class="driver"><img class="flag"
+          src="https://flagcdn.com/20x15/${flag}.png"
+          srcset="https://flagcdn.com/40x30/${flag}.png 2x,
+          https://flagcdn.com/60x45/${flag}.png 3x"
+          height="15" width="20" alt=""/>${r.driver || 'N/A'}</div></td>
       <td>${r.end_value}</td>
       <td>${r.delta}</td>
       <td>${r.percent_change ? r.percent_change.toFixed(2) + '%' : '—'}</td>

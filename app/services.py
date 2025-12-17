@@ -10,14 +10,18 @@ from zoneinfo import ZoneInfo
 
 from fastapi.concurrency import run_in_threadpool
 
-from .db import engine
+from sqlalchemy import text
+
+from .db import engine, get_session
 from .iracing_client import IRacingClient
 from .models import Base
 from .snapshots import (
     find_closest_snapshot,
     get_oldest_snapshot_date,
+    list_snapshot_files,
     load_snapshot_map,
     load_snapshot_rows,
+    parse_snapshot_date,
     snapshot_path,
     store_snapshot,
 )
@@ -31,6 +35,127 @@ _top_growers_cache: dict[
     dict[str, object],
 ] = {}
 _top_growers_cache_lock = asyncio.Lock()
+
+
+def _latest_snapshot_for_category(category: str) -> Path | None:
+    """Return the most recent snapshot file for a category, if any."""
+
+    latest_path: Path | None = None
+    for path in reversed(list_snapshot_files(category)):
+        if parse_snapshot_date(path) is None:
+            continue
+        latest_path = path
+        break
+    return latest_path
+
+
+def sync_members_from_snapshots() -> dict[str, int]:
+    """Ensure Member rows exist using the latest snapshots for each category."""
+
+    members: list[dict[str, object]] = []
+    for category in settings.categories_normalized:
+        path = _latest_snapshot_for_category(category)
+        if not path:
+            logger.info("No snapshots found for category %s", category)
+            continue
+
+        for row in load_snapshot_rows(path):
+            cust_id = row.get("cust_id")
+            if not isinstance(cust_id, int):
+                continue
+            display_name_obj = row.get("display_name")
+            location_obj = row.get("location")
+            display_name = display_name_obj if isinstance(display_name_obj, str) else None
+            location = location_obj if isinstance(location_obj, str) else None
+            members.append(
+                {
+                    "cust_id": cust_id,
+                    "display_name": display_name,
+                    "location": location,
+                }
+            )
+
+    if not members:
+        logger.info("No snapshot rows available for member sync")
+        return {"seen": 0, "new": 0, "updated": 0}
+
+    with get_session() as session:
+        session.execute(text("DROP TABLE IF EXISTS member_staging"))
+        session.execute(
+            text(
+                """
+                CREATE TEMPORARY TABLE member_staging (
+                    cust_id INTEGER PRIMARY KEY,
+                    display_name TEXT,
+                    location TEXT
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO member_staging (cust_id, display_name, location)
+                VALUES (:cust_id, :display_name, :location)
+                ON CONFLICT(cust_id) DO UPDATE SET
+                    display_name = COALESCE(excluded.display_name, member_staging.display_name),
+                    location = COALESCE(excluded.location, member_staging.location)
+                """
+            ),
+            members,
+        )
+
+        new_count = session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM member_staging s
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM members m WHERE m.cust_id = s.cust_id
+                )
+                """
+            )
+        ).scalar_one()
+
+        updated_count = session.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM member_staging s
+                JOIN members m ON m.cust_id = s.cust_id
+                WHERE (s.display_name IS NOT NULL AND m.display_name IS NULL)
+                   OR (s.location IS NOT NULL AND m.location IS NULL)
+                """
+            )
+        ).scalar_one()
+
+        session.execute(
+            text(
+                """
+                INSERT INTO members (cust_id, display_name, location)
+                SELECT s.cust_id, s.display_name, s.location
+                FROM member_staging s
+                ON CONFLICT(cust_id) DO UPDATE SET
+                    display_name = COALESCE(excluded.display_name, members.display_name),
+                    location = COALESCE(excluded.location, members.location)
+                """
+            )
+        )
+
+    logger.info(
+        "Member sync from snapshots complete: seen=%s new=%s updated=%s",
+        len(members),
+        new_count,
+        updated_count,
+    )
+
+    return {"seen": len(members), "new": new_count, "updated": updated_count}
+
+
+async def sync_members_from_snapshots_async() -> dict[str, int]:
+    """Async wrapper for member sync."""
+
+    return await run_in_threadpool(sync_members_from_snapshots)
 
 
 def _utcnow() -> datetime:

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from .services import fetch_and_store
+from .services import fetch_and_store, sync_members_from_snapshots_async
 from .settings import settings
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,12 @@ async def scheduled_job() -> None:
     logger.info("sports_car fetch completed; waiting before formula_car")
     await asyncio.sleep(60)
     await fetch_and_store("formula_car")
-    logger.info("Scheduled fetch run complete for sports_car and formula_car")
+    logger.info("formula_car fetch completed; waiting before sync_members_from_snapshots_async")
+    await asyncio.sleep(60)
+    await sync_members_from_snapshots_async()
+    logger.info(
+        "Scheduled fetch run complete for sports_car and formula_car with member sync"
+    )
 
 
 def start_scheduler() -> None:

@@ -50,8 +50,7 @@ class MemberSyncTests(unittest.TestCase):
 
     def test_sync_members_from_latest_snapshots(self) -> None:
         counts = sync_members_from_snapshots()
-        self.assertEqual(counts["new"], 3)
-        self.assertEqual(counts["updated"], 0)
+        self.assertEqual(counts, 3)
 
         with get_session() as session:
             members = session.query(Member).all()
@@ -62,8 +61,7 @@ class MemberSyncTests(unittest.TestCase):
 
         # Run sync again to ensure no duplicate inserts occur
         counts_second_run = sync_members_from_snapshots()
-        self.assertEqual(counts_second_run["new"], 0)
-        self.assertEqual(counts_second_run["updated"], 0)
+        self.assertEqual(counts_second_run, 3)
 
         with get_session() as session:
             members = session.query(Member).all()

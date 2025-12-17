@@ -22,6 +22,7 @@ from .services import (
     get_irating_delta,
     get_latest_snapshot,
     get_top_growers,
+    sync_members_from_snapshots_async,
 )
 from .settings import settings
 
@@ -67,6 +68,12 @@ async def run_fetch_now(category: str | None = Query(None)):
 
     counts = await fetch_and_store(category)
     return {"counts": counts}
+
+
+@public_router.post("/admin/sync-members", dependencies=[Depends(_require_admin)])
+async def sync_members():
+    count = await sync_members_from_snapshots_async()
+    return {"upserted": count}
 
 
 @public_router.post("/admin/licenses", dependencies=[Depends(_require_admin)])

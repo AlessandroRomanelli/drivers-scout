@@ -80,6 +80,13 @@ components:
             type: integer
           description: Number of rows stored per category.
       required: [counts]
+    SyncMembersResult:
+      type: object
+      properties:
+        upserted:
+          type: integer
+          description: Number of member rows inserted or updated.
+      required: [upserted]
     MemberSnapshot:
       type: object
       properties:
@@ -251,6 +258,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FetchCounts'
+  /admin/sync-members:
+    post:
+      summary: Sync members from latest snapshots
+      description: Creates or updates Member records using the latest snapshot for each category.
+      security:
+        - AdminSecretAuth: []
+      responses:
+        '200':
+          description: Member sync completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncMembersResult'
   /admin/licenses:
     post:
       summary: Issue a new license

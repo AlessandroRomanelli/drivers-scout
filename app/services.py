@@ -82,15 +82,17 @@ def sync_members_from_snapshots() -> dict[str, int]:
                 """
             )
         )
-        session.execute(
-            text(
-                """
-                INSERT INTO member_staging (cust_id, display_name, location)
-                VALUES (:cust_id, :display_name, :location)
-                """
-            ),
-            members.values(),
-        )
+        member_values = list(members.values())
+        if member_values:
+            session.execute(
+                text(
+                    """
+                    INSERT INTO member_staging (cust_id, display_name, location)
+                    VALUES (:cust_id, :display_name, :location)
+                    """
+                ),
+                member_values,
+            )
 
         session.execute(
             text(

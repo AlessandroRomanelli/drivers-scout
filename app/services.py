@@ -52,7 +52,7 @@ def _latest_snapshot_for_category(category: str) -> Path | None:
 def sync_members_from_snapshots() -> dict[str, int]:
     """Ensure Member rows exist using the latest snapshots for each category."""
 
-    members: list[dict[str, object]] = []
+    members: dict[str, dict[str, object]] = {}
     for category in settings.categories_normalized:
         path = _latest_snapshot_for_category(category)
         if not path:
@@ -63,21 +63,11 @@ def sync_members_from_snapshots() -> dict[str, int]:
             cust_id = row.get("cust_id")
             if not isinstance(cust_id, int):
                 continue
-            display_name_obj = row.get("display_name")
-            location_obj = row.get("location")
-            display_name = display_name_obj if isinstance(display_name_obj, str) else None
-            location = location_obj if isinstance(location_obj, str) else None
-            members.append(
-                {
-                    "cust_id": cust_id,
-                    "display_name": display_name,
-                    "location": location,
-                }
-            )
-
-    if not members:
-        logger.info("No snapshot rows available for member sync")
-        return {"seen": 0, "new": 0, "updated": 0}
+            members[cust_id] = {
+                "cust_id": cust_id,
+                "display_name": row.get("display_name"),
+                "location":  row.get("location"),
+            }
 
     with get_session() as session:
         session.execute(text("DROP TABLE IF EXISTS member_staging"))
@@ -97,37 +87,10 @@ def sync_members_from_snapshots() -> dict[str, int]:
                 """
                 INSERT INTO member_staging (cust_id, display_name, location)
                 VALUES (:cust_id, :display_name, :location)
-                ON CONFLICT(cust_id) DO UPDATE SET
-                    display_name = COALESCE(excluded.display_name, member_staging.display_name),
-                    location = COALESCE(excluded.location, member_staging.location)
                 """
             ),
-            members,
+            members.values(),
         )
-
-        new_count = session.execute(
-            text(
-                """
-                SELECT COUNT(*)
-                FROM member_staging s
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM members m WHERE m.cust_id = s.cust_id
-                )
-                """
-            )
-        ).scalar_one()
-
-        updated_count = session.execute(
-            text(
-                """
-                SELECT COUNT(*)
-                FROM member_staging s
-                JOIN members m ON m.cust_id = s.cust_id
-                WHERE (s.display_name IS NOT NULL AND m.display_name IS NULL)
-                   OR (s.location IS NOT NULL AND m.location IS NULL)
-                """
-            )
-        ).scalar_one()
 
         session.execute(
             text(
@@ -143,13 +106,11 @@ def sync_members_from_snapshots() -> dict[str, int]:
         )
 
     logger.info(
-        "Member sync from snapshots complete: seen=%s new=%s updated=%s",
-        len(members),
-        new_count,
-        updated_count,
+        "Member sync from snapshots complete. Upserted %s members",
+        members.size()
     )
 
-    return {"seen": len(members), "new": new_count, "updated": updated_count}
+    return members.size()
 
 
 async def sync_members_from_snapshots_async() -> dict[str, int]:

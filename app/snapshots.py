@@ -82,7 +82,7 @@ def load_snapshot_rows(path: Path) -> Iterator[SnapshotRow]:
             yield normalize_row(row)
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=8)
 def _load_snapshot_map_cached(path: Path, mtime_ns: int) -> Dict[int, SnapshotRow]:
     result: Dict[int, SnapshotRow] = {}
     for row in load_snapshot_rows(path):

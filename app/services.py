@@ -35,6 +35,16 @@ _top_growers_cache: dict[
     dict[str, object],
 ] = {}
 _top_growers_cache_lock = asyncio.Lock()
+_latest_snapshot_cache: dict[
+    tuple[str, date, int],
+    dict[str, object],
+] = {}
+_latest_snapshot_cache_lock = asyncio.Lock()
+_latest_snapshots_cache: dict[
+    tuple[str, date, tuple[int, ...]],
+    dict[str, object],
+] = {}
+_latest_snapshots_cache_lock = asyncio.Lock()
 
 
 def _latest_snapshot_for_category(category: str) -> Path | None:
@@ -216,20 +226,48 @@ async def _get_member_row(
 
 
 async def get_latest_snapshot(cust_id: int, category: str):
-    row, snapshot_date = await _get_member_row(cust_id, category)
-    if not row or not snapshot_date:
-        return None
-    return {
-        "cust_id": cust_id,
-        "category": category,
-        "snapshot_date": snapshot_date,
-        "fetched_at": datetime.now(timezone.utc),
-        "driver": row.get("display_name"),
-        "location": row.get("location"),
-        "irating": row.get("irating"),
-        "starts": row.get("starts"),
-        "wins": row.get("wins"),
-    }
+    client = IRacingClient()
+    try:
+        target_date = date.today()
+        path, resolved_date = await _ensure_snapshot(
+            category, target_date, client, fetch_if_missing=True
+        )
+        if not path or not resolved_date:
+            return None
+        cache_key = (category, resolved_date, cust_id)
+        now = _utcnow()
+        async with _latest_snapshot_cache_lock:
+            cached = _latest_snapshot_cache.get(cache_key)
+            if cached:
+                expires_at = cached.get("expires_at")
+                if isinstance(expires_at, datetime) and expires_at > now:
+                    return cached["payload"]
+
+        row, snapshot_date = await _get_member_row(cust_id, category, resolved_date)
+        if not row or not snapshot_date:
+            payload = None
+        else:
+            payload = {
+                "cust_id": cust_id,
+                "category": category,
+                "snapshot_date": snapshot_date,
+                "fetched_at": datetime.now(timezone.utc),
+                "driver": row.get("display_name"),
+                "location": row.get("location"),
+                "irating": row.get("irating"),
+                "starts": row.get("starts"),
+                "wins": row.get("wins"),
+            }
+
+        async with _latest_snapshot_cache_lock:
+            _latest_snapshot_cache[cache_key] = {
+                "payload": payload,
+                "expires_at": _next_cache_expiry(_utcnow()),
+            }
+
+        return payload
+    finally:
+        await client.close()
 
 
 async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, object] | None:
@@ -242,6 +280,15 @@ async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, 
         if not path or not resolved_date:
             return None
         snapshot_map = load_snapshot_map(path)
+        normalized_cust_ids = tuple(sorted(cust_ids))
+        cache_key = (category, resolved_date, normalized_cust_ids)
+        now = _utcnow()
+        async with _latest_snapshots_cache_lock:
+            cached = _latest_snapshots_cache.get(cache_key)
+            if cached:
+                expires_at = cached.get("expires_at")
+                if isinstance(expires_at, datetime) and expires_at > now:
+                    return cached["payload"]
         results: list[dict[str, object]] = []
         missing: list[int] = []
         for cust_id in cust_ids:
@@ -259,13 +306,19 @@ async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, 
                     "wins": row.get("wins"),
                 }
             )
-        return {
+        payload = {
             "category": category,
             "snapshot_date": resolved_date,
             "fetched_at": datetime.now(timezone.utc),
             "results": results,
             "missing": missing,
         }
+        async with _latest_snapshots_cache_lock:
+            _latest_snapshots_cache[cache_key] = {
+                "payload": payload,
+                "expires_at": _next_cache_expiry(_utcnow()),
+            }
+        return payload
     finally:
         await client.close()
 

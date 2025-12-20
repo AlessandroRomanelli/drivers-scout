@@ -40,11 +40,6 @@ _latest_snapshot_cache: dict[
     dict[str, object],
 ] = {}
 _latest_snapshot_cache_lock = asyncio.Lock()
-_latest_snapshots_cache: dict[
-    tuple[str, date, tuple[int, ...]],
-    dict[str, object],
-] = {}
-_latest_snapshots_cache_lock = asyncio.Lock()
 
 
 def _latest_snapshot_for_category(category: str) -> Path | None:
@@ -279,15 +274,6 @@ async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, 
         )
         if not path or not resolved_date:
             return None
-        normalized_cust_ids = tuple(sorted(cust_ids))
-        cache_key = (category, resolved_date, normalized_cust_ids)
-        now = _utcnow()
-        async with _latest_snapshots_cache_lock:
-            cached = _latest_snapshots_cache.get(cache_key)
-            if cached:
-                expires_at = cached.get("expires_at")
-                if isinstance(expires_at, datetime) and expires_at > now:
-                    return cached["payload"]
         snapshot_map = load_snapshot_map(path)
         results: list[dict[str, object]] = []
         missing: list[int] = []
@@ -313,11 +299,6 @@ async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, 
             "results": results,
             "missing": missing,
         }
-        async with _latest_snapshots_cache_lock:
-            _latest_snapshots_cache[cache_key] = {
-                "payload": payload,
-                "expires_at": _next_cache_expiry(_utcnow()),
-            }
         return payload
     finally:
         await client.close()

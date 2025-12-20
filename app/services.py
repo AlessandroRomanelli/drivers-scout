@@ -279,7 +279,6 @@ async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, 
         )
         if not path or not resolved_date:
             return None
-        snapshot_map = load_snapshot_map(path)
         normalized_cust_ids = tuple(sorted(cust_ids))
         cache_key = (category, resolved_date, normalized_cust_ids)
         now = _utcnow()
@@ -289,6 +288,7 @@ async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, 
                 expires_at = cached.get("expires_at")
                 if isinstance(expires_at, datetime) and expires_at > now:
                     return cached["payload"]
+        snapshot_map = load_snapshot_map(path)
         results: list[dict[str, object]] = []
         missing: list[int] = []
         for cust_id in cust_ids:

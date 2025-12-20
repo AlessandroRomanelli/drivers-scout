@@ -116,6 +116,47 @@ components:
           type: integer
           nullable: true
       required: [cust_id, category, snapshot_date, fetched_at]
+    MemberSnapshotEntry:
+      type: object
+      properties:
+        cust_id:
+          type: integer
+        driver:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        irating:
+          type: integer
+          nullable: true
+        starts:
+          type: integer
+          nullable: true
+        wins:
+          type: integer
+          nullable: true
+      required: [cust_id]
+    MemberSnapshotsResponse:
+      type: object
+      properties:
+        category:
+          type: string
+        snapshot_date:
+          type: string
+          format: date
+        fetched_at:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberSnapshotEntry'
+        missing:
+          type: array
+          items:
+            type: integer
+      required: [category, snapshot_date, fetched_at, results, missing]
     MemberSummary:
       type: object
       properties:
@@ -387,6 +428,36 @@ paths:
                 $ref: '#/components/schemas/MemberSnapshot'
         '400':
           description: Unsupported category.
+        '404':
+          description: No snapshot found.
+  /members/latest:
+    get:
+      summary: Latest snapshot for multiple members
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: cust_ids
+          required: true
+          schema:
+            type: string
+          description: Comma-separated list of member cust_ids (e.g., "111,222").
+        - in: query
+          name: category
+          schema:
+            type: string
+            default: sports_car
+          description: Category name as configured in the service.
+      responses:
+        '200':
+          description: Latest available snapshot data for the requested members.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberSnapshotsResponse'
+        '400':
+          description: Unsupported category or invalid cust_ids.
         '404':
           description: No snapshot found.
   /members/search:

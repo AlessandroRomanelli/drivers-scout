@@ -47,6 +47,7 @@ curl http://localhost:8000/health
 curl -X POST "http://localhost:8000/admin/run-fetch?category=sports_car"
 curl -X POST "http://localhost:8000/admin/sync-members"
 curl "http://localhost:8000/members/419877/latest?category=sports_car"
+curl "http://localhost:8000/members/latest?cust_ids=419877,123456&category=sports_car"
 curl "http://localhost:8000/members/419877/delta?category=sports_car&days=30"
 curl "http://localhost:8000/leaders/growers?category=sports_car&days=30&limit=10"
 ```

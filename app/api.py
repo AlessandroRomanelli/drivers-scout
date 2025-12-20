@@ -21,6 +21,7 @@ from .services import (
     fetch_and_store,
     get_irating_delta,
     get_latest_snapshot,
+    get_latest_snapshots,
     get_top_growers,
     sync_members_from_snapshots_async,
 )
@@ -39,6 +40,26 @@ def _require_admin(admin_secret: str | None = Header(None, alias="X-Admin-Secret
 def _get_db_session() -> Session:
     with get_session() as session:
         yield session
+
+
+def _parse_cust_ids(cust_ids: str) -> list[int]:
+    raw_ids = [value.strip() for value in cust_ids.split(",")]
+    filtered = [value for value in raw_ids if value]
+    if not filtered:
+        raise HTTPException(
+            status_code=400,
+            detail="cust_ids must be a non-empty comma-separated list of integers",
+        )
+    parsed: list[int] = []
+    for value in filtered:
+        try:
+            parsed.append(int(value))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid cust_id '{value}'. Expected comma-separated integers.",
+            ) from exc
+    return parsed
 
 
 @public_router.get("/health")
@@ -160,6 +181,20 @@ async def latest_member_snapshot(cust_id: int, category: str = Query("sports_car
     if category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
     snapshot = await get_latest_snapshot(cust_id, category)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="No snapshot found")
+    return snapshot
+
+
+@router.get("/members/latest")
+async def latest_members_snapshot(
+    cust_ids: str = Query(..., description="Comma-separated list of member cust_ids"),
+    category: str = Query("sports_car"),
+):
+    if category not in settings.categories_normalized:
+        raise HTTPException(status_code=400, detail="Unsupported category")
+    parsed_ids = _parse_cust_ids(cust_ids)
+    snapshot = await get_latest_snapshots(parsed_ids, category)
     if not snapshot:
         raise HTTPException(status_code=404, detail="No snapshot found")
     return snapshot

@@ -232,6 +232,44 @@ async def get_latest_snapshot(cust_id: int, category: str):
     }
 
 
+async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, object] | None:
+    client = IRacingClient()
+    try:
+        target_date = date.today()
+        path, resolved_date = await _ensure_snapshot(
+            category, target_date, client, fetch_if_missing=True
+        )
+        if not path or not resolved_date:
+            return None
+        snapshot_map = load_snapshot_map(path)
+        results: list[dict[str, object]] = []
+        missing: list[int] = []
+        for cust_id in cust_ids:
+            row = snapshot_map.get(cust_id)
+            if not row:
+                missing.append(cust_id)
+                continue
+            results.append(
+                {
+                    "cust_id": cust_id,
+                    "driver": row.get("display_name"),
+                    "location": row.get("location"),
+                    "irating": row.get("irating"),
+                    "starts": row.get("starts"),
+                    "wins": row.get("wins"),
+                }
+            )
+        return {
+            "category": category,
+            "snapshot_date": resolved_date,
+            "fetched_at": datetime.now(timezone.utc),
+            "results": results,
+            "missing": missing,
+        }
+    finally:
+        await client.close()
+
+
 async def get_irating_delta(
     cust_id: int,
     category: str,

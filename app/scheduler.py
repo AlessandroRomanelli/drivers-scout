@@ -100,7 +100,7 @@ async def deliver_discord_subscriptions(
             try:
                 data = await get_top_growers(
                     subscription.category,
-                    days=7,
+                    days=6,
                     limit=10,
                     min_current_irating=subscription.min_irating,
                 )

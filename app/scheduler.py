@@ -111,17 +111,13 @@ async def deliver_discord_subscriptions(
                 iracing_week = _iracing_week(_snapshot_end_datetime(end_date_used))
 
                 embed = {
-                    "title": "Top iRating Growers",
-                    "description": (
-                        "Weekly iRating growth report for Discord subscriptions."
-                    ),
+                    "title": f"Weekly Top iRating Growers – Week  {iracing_week}",
                     "fields": [
                         {
-                            "name": "Metadata",
+                            "name": "Subscription Data",
                             "value": (
                                 f"Category: {subscription.category}\n"
                                 f"Snapshot range: {snapshot_range}\n"
-                                f"iRacing Week: {iracing_week}\n"
                                 f"Minimum iRating: "
                                 f"{subscription.min_irating if subscription.min_irating is not None else 'None'}"
                             ),
@@ -137,7 +133,7 @@ async def deliver_discord_subscriptions(
                             "name": f"{index}. :flag_{item.get('location').lower() or 'aq'}: {driver}",
                             "value": (
                                 f"iRating: {item.get('end_value')} (+{item.get('delta')})\n"
-                                f"wins/starts: {item.get('wins')}/{item.get('starts')}"
+                                f"Wins/Starts: {item.get('wins')}/{item.get('starts')}"
                             ),
                             "inline": False,
                         }

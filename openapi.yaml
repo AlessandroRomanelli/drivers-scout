@@ -52,7 +52,7 @@ components:
           nullable: true
         valid:
           type: boolean
-      required: [key, active, revoked_at, valid]
+      required: [key, label, active, revoked_at, valid]
     LicenseRecord:
       type: object
       properties:
@@ -70,7 +70,39 @@ components:
           type: string
           format: date-time
           nullable: true
-      required: [key, active, created_at]
+      required: [key, label, active, created_at, revoked_at]
+    SubscriptionCreate:
+      type: object
+      properties:
+        webhook_url:
+          type: string
+          format: uri
+        category:
+          type: string
+        min_irating:
+          type: integer
+          nullable: true
+          minimum: 0
+      required: [webhook_url, category]
+    SubscriptionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        license_key:
+          type: string
+        category:
+          type: string
+        min_irating:
+          type: integer
+          nullable: true
+        webhook_url:
+          type: string
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+      required: [id, license_key, category, webhook_url, created_at]
     FetchCounts:
       type: object
       properties:
@@ -250,6 +282,14 @@ components:
         snapshot_age_days:
           type: integer
           nullable: true
+        start_date_used:
+          type: string
+          format: date
+          nullable: true
+        end_date_used:
+          type: string
+          format: date
+          nullable: true
       required: [category, results]
 paths:
   /health:
@@ -290,7 +330,6 @@ paths:
           required: false
           schema:
             type: string
-            enum: [sports_car, formula_car]
           description: Category to fetch. Defaults to configured categories when omitted.
       responses:
         '200':
@@ -312,6 +351,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SyncMembersResult'
+  /admin/discord-subscriptions/run:
+    post:
+      summary: Deliver Discord webhook notifications
+      security:
+        - AdminSecretAuth: []
+      responses:
+        '200':
+          description: Discord subscriptions processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
   /admin/licenses:
     post:
       summary: Issue a new license
@@ -401,6 +452,58 @@ paths:
           description: Admin secret missing or invalid.
         '404':
           description: License not found.
+  /subscriptions:
+    post:
+      summary: Create or update a webhook subscription
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionCreate'
+      responses:
+        '200':
+          description: Subscription updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '201':
+          description: Subscription created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '401':
+          description: License missing or invalid.
+        '422':
+          description: Unsupported category.
+  /subscriptions/{subscription_id}:
+    delete:
+      summary: Delete a webhook subscription
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: subscription_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Subscription removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '401':
+          description: License missing or invalid.
+        '404':
+          description: Subscription not found.
   /members/{cust_id}/latest:
     get:
       summary: Latest snapshot for a member
@@ -426,6 +529,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MemberSnapshot'
+        '401':
+          description: License missing or invalid.
         '400':
           description: Unsupported category.
         '404':
@@ -456,6 +561,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MemberSnapshotsResponse'
+        '401':
+          description: License missing or invalid.
         '400':
           description: Unsupported category or invalid cust_ids.
         '404':
@@ -496,6 +603,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MemberSearchResponse'
+        '401':
+          description: License missing or invalid.
         '422':
           description: Query too short.
   /members/{cust_id}/delta:
@@ -540,6 +649,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeltaResult'
+        '401':
+          description: License missing or invalid.
         '400':
           description: Unsupported category.
         '404':
@@ -582,5 +693,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TopGrowersResponse'
+        '401':
+          description: License missing or invalid.
         '400':
           description: Unsupported category.

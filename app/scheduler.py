@@ -99,10 +99,9 @@ async def deliver_discord_subscriptions() -> None:
                         {
                             "name": f"{index}. {driver}",
                             "value": (
-                                f"cust_id: {item.get('cust_id')}\n"
-                                f"driver: {driver}\n"
-                                f"delta: {item.get('delta')}\n"
-                                f"end_value: {item.get('end_value')}\n"
+                                f"driver: :flag_{item.get('location').lower() or 'aq'}: {driver}\n"
+                                f"iRating: {item.get('end_value')}\n"
+                                f"Gain: {item.get('delta')}\n"
                                 f"wins/starts: {item.get('wins')}/{item.get('starts')}"
                             ),
                             "inline": False,
@@ -161,7 +160,7 @@ def start_scheduler() -> None:
         trigger=CronTrigger(
             day_of_week="mon",
             hour=23,
-            minute=55,
+            minute=58,
             timezone=SCHEDULE_TIMEZONE,
         ),
         name="deliver_discord_subscriptions",

@@ -102,9 +102,17 @@ async def sync_members():
 @public_router.post(
     "/admin/discord-subscriptions/run", dependencies=[Depends(_require_admin)]
 )
-async def run_discord_subscriptions():
-    await deliver_discord_subscriptions()
-    return {"status": "ok"}
+async def run_discord_subscriptions(
+    subscription_id: int = Query(..., ge=1),
+):
+    result = await deliver_discord_subscriptions(
+        subscription_id=subscription_id,
+    )
+    if result.status == "not_found":
+        raise HTTPException(status_code=404, detail=result.message or "Subscription not found")
+    if result.status == "inactive":
+        raise HTTPException(status_code=409, detail=result.message or "Subscription inactive")
+    return {"status": "ok", "delivered": result.delivered}
 
 
 @public_router.post("/admin/licenses", dependencies=[Depends(_require_admin)])

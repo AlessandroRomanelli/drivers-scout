@@ -453,6 +453,22 @@ paths:
         '404':
           description: License not found.
   /subscriptions:
+    get:
+      summary: List webhook subscriptions
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Subscriptions listed.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubscriptionResponse'
+        '401':
+          description: License missing or invalid.
     post:
       summary: Create or update a webhook subscription
       security:

@@ -18,17 +18,24 @@ from fastapi.testclient import TestClient
 
 from app.api import router
 from app import services
+from app.db import get_session
+from app.models import License, Subscription
+from app.services import init_db
 
 
 class GrowersApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        init_db()
         cls.app = FastAPI()
         cls.app.include_router(router)
         cls.client = TestClient(cls.app)
         cls.snapshots_dir = Path(os.environ["SNAPSHOTS_DIR"]) / "sports_car"
 
     def setUp(self) -> None:
+        with get_session() as session:
+            session.query(Subscription).delete()
+            session.query(License).delete()
         if self.snapshots_dir.exists():
             shutil.rmtree(self.snapshots_dir)
         self.snapshots_dir.mkdir(parents=True, exist_ok=True)
@@ -123,6 +130,42 @@ class GrowersApiTests(unittest.TestCase):
             )
         self.assertEqual(response3.status_code, 200)
         self.assertTrue(mock_threadpool.called)
+
+    def test_list_subscriptions_scopes_to_license(self) -> None:
+        license_a = License(key="license-a", label="alpha", active=True)
+        license_b = License(key="license-b", label="beta", active=True)
+        with get_session() as session:
+            session.add_all([license_a, license_b])
+            session.flush()
+            session.add_all(
+                [
+                    Subscription(
+                        license_key=license_a.key,
+                        webhook_url="https://example.com/a",
+                        category="sports_car",
+                        min_irating=None,
+                    ),
+                    Subscription(
+                        license_key=license_a.key,
+                        webhook_url="https://example.com/b",
+                        category="formula_car",
+                        min_irating=1500,
+                    ),
+                    Subscription(
+                        license_key=license_b.key,
+                        webhook_url="https://example.com/c",
+                        category="sports_car",
+                        min_irating=500,
+                    ),
+                ]
+            )
+
+        response = self.client.get("/subscriptions", headers={"X-License-Key": license_a.key})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload), 2)
+        self.assertTrue(all(item["license_key"] == license_a.key for item in payload))
 
 
 if __name__ == "__main__":

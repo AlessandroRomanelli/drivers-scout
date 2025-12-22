@@ -163,6 +163,20 @@ def _subscription_to_response(subscription: Subscription) -> SubscriptionRespons
     return SubscriptionResponse.model_validate(subscription)
 
 
+@router.get("/subscriptions", response_model=list[SubscriptionResponse])
+def list_subscriptions(
+    license_record: License = Depends(get_active_license),
+    session: Session = Depends(_get_db_session),
+):
+    records = (
+        session.query(Subscription)
+        .filter(Subscription.license_key == license_record.key)
+        .order_by(Subscription.created_at.desc())
+        .all()
+    )
+    return [_subscription_to_response(record) for record in records]
+
+
 @router.get("/members/search")
 def search_members(
     q: str = Query(..., min_length=3, description="Partial member display name"),

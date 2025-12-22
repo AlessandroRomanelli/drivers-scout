@@ -305,6 +305,24 @@ function loadFiltersFromSession() {
     }
 }
 
+const TAB_KEY = 'drivers-scout-active-tab';
+
+function setActiveTab(tabId) {
+    sessionStorage.setItem(TAB_KEY, tabId);
+
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+    document.getElementById(tabId).classList.remove('hidden');
+    document.querySelector(`.tab-btn[data-tab="${tabId}"]`).classList.add('active');
+}
+
+setActiveTab(sessionStorage.getItem(TAB_KEY) || 'tab-search');
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+});
+
 licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.trim()));
 runQuery.addEventListener('click', () => {
     saveFiltersToSession()

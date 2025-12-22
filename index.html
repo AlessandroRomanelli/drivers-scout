@@ -25,56 +25,91 @@
     <!-- Dashboard -->
     <section id="dashboard" class="card hidden">
         <h2>Dashboard</h2>
-        <div class="filters">
-            <label>Category
-                <select id="category">
-                    <option value="sports_car" selected>Sports Car</option>
-                    <option value="formula_car">Formula Car</option>
-                </select>
-            </label>
-            <label>Days
-                <input id="days" type="number" min="1" value="30"/>
-            </label>
-            <label>Limit
-                <input id="limit" type="number" min="1" max="100" value="20"/>
-            </label>
-            <label>Min current iRating
-                <input id="minIr" type="number" min="0" placeholder="(optional)"/>
-            </label>
-            <button id="run-query">Load Gainers</button>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="tab-search" id="tab-search-btn">Members search</button>
+            <button class="tab-btn" data-tab="tab-webhook" id="tab-webhook-btn">Webhook subscription</button>
         </div>
 
-        <div id="results" hidden>
-            <header id="rangeHeader" class="range-header">
-                <div class="range-title">Time range</div>
-                <div id="rangeText" class="range-text"></div>
-            </header>
-            <section style="max-height: 40vh">
-                <canvas id="chart"></canvas>
-            </section>
-            <table id="table">
-                <thead>
-                <tr>
-                    <th class="sortable" data-key="rank">#</th>
-                    <th class="sortable" data-key="driver">Driver</th>
-                    <th class="sortable" data-key="end_value">Current iRating</th>
-                    <th class="sortable" data-key="delta">Δ iRating</th>
-                    <th class="sortable" data-key="percent_change">% Change</th>
-                    <th class="sortable" data-key="starts">Starts</th>
-                    <th class="sortable" data-key="wins">Wins</th>
-                </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-            <div class="export-btn-container" style="margin-top:1rem; text-align:right;">
-                <button id="export-csv">Export to CSV</button>
+        <div id="tab-search" class="tab-panel">
+            <div class="filters">
+                <label>Category
+                    <select id="category">
+                        <option value="sports_car" selected>Sports Car</option>
+                        <option value="formula_car">Formula Car</option>
+                    </select>
+                </label>
+                <label>Days
+                    <input id="days" type="number" min="1" value="30"/>
+                </label>
+                <label>Limit
+                    <input id="limit" type="number" min="1" max="100" value="20"/>
+                </label>
+                <label>Min current iRating
+                    <input id="minIr" type="number" min="0" placeholder="(optional)"/>
+                </label>
+                <button id="run-query">Load Gainers</button>
+            </div>
+
+            <div id="results" hidden>
+                <header id="rangeHeader" class="range-header">
+                    <div class="range-title">Time range</div>
+                    <div id="rangeText" class="range-text"></div>
+                </header>
+                <section style="max-height: 40vh">
+                    <canvas id="chart"></canvas>
+                </section>
+                <table id="table">
+                    <thead>
+                    <tr>
+                        <th class="sortable" data-key="rank">#</th>
+                        <th class="sortable" data-key="driver">Driver</th>
+                        <th class="sortable" data-key="end_value">Current iRating</th>
+                        <th class="sortable" data-key="delta">Δ iRating</th>
+                        <th class="sortable" data-key="percent_change">% Change</th>
+                        <th class="sortable" data-key="starts">Starts</th>
+                        <th class="sortable" data-key="wins">Wins</th>
+                    </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <div class="export-btn-container" style="margin-top:1rem; text-align:right;">
+                    <button id="export-csv">Export to CSV</button>
+                </div>
             </div>
         </div>
+
+        <div id="tab-webhook" class="tab-panel hidden">
+            <p style="margin-top:0;">Register or update a webhook subscription.</p>
+
+            <div class="filters">
+                <label>Webhook URL
+                    <input id="sub-webhook-url" placeholder="https://example.com/webhook" />
+                </label>
+
+                <label>Category
+                    <select id="sub-category">
+                        <option value="sports_car">sports_car</option>
+                        <option value="formula_car">formula_car</option>
+                    </select>
+                </label>
+
+                <label>Min iRating
+                    <input id="sub-min-ir" type="number" min="0" placeholder="e.g. 3000" />
+                </label>
+
+                <button id="sub-save">Save subscription</button>
+            </div>
+
+            <div id="sub-status" class="status"></div>
+        </div>
     </section>
+
     <footer style="margin-top:2rem; padding:1rem 0; text-align:center; color:#94a3b8; font-size:0.9rem;">
         © <span id="year"></span> AR Media Solutions. All rights reserved.
     </footer>
 </main>
 <script src="./assets/index.js"></script>
+<script src="./assets/subscription.js"></script>
 </body>
 </html>

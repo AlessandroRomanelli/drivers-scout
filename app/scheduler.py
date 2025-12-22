@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 SCHEDULE_HOURS = [23, 5, 11, 17]
 SCHEDULE_HOURS_EXPRESSION = ",".join(str(h) for h in SCHEDULE_HOURS)
 SCHEDULE_TIMEZONE = ZoneInfo("UTC")
+IRACING_WEEK_EPOCH = datetime(2025, 12, 16, tzinfo=timezone.utc)
 
 scheduler = AsyncIOScheduler(timezone=SCHEDULE_TIMEZONE)
 
@@ -73,6 +74,7 @@ async def deliver_discord_subscriptions() -> None:
                 start_date_used = data.get("start_date_used")
                 end_date_used = data.get("end_date_used")
                 snapshot_range = _format_snapshot_range(start_date_used, end_date_used)
+                iracing_week = _iracing_week(_snapshot_end_datetime(end_date_used))
 
                 embed = {
                     "title": "Top iRating Growers",
@@ -85,6 +87,7 @@ async def deliver_discord_subscriptions() -> None:
                             "value": (
                                 f"Category: {subscription.category}\n"
                                 f"Snapshot range: {snapshot_range}\n"
+                                f"iRacing Week: {iracing_week}\n"
                                 f"Minimum iRating: "
                                 f"{subscription.min_irating if subscription.min_irating is not None else 'None'}"
                             ),
@@ -122,6 +125,18 @@ async def deliver_discord_subscriptions() -> None:
                 )
 
     logger.info("Discord subscription delivery run complete")
+
+
+def _iracing_week(now: datetime) -> int:
+    reference = now.astimezone(timezone.utc)
+    weeks = int((reference - IRACING_WEEK_EPOCH).total_seconds() // (7 * 24 * 3600))
+    return (weeks % 13) + 1
+
+
+def _snapshot_end_datetime(end_date_used: object) -> datetime:
+    if isinstance(end_date_used, date):
+        return datetime.combine(end_date_used, datetime.min.time(), tzinfo=timezone.utc)
+    return datetime.now(timezone.utc)
 
 
 def _format_snapshot_range(start: object, end: object) -> str:

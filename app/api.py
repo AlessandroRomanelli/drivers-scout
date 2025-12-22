@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from .auth import get_active_license, require_license
@@ -257,7 +257,22 @@ def create_subscription(
     payload: SubscriptionCreate,
     license_record: License = Depends(get_active_license),
     session: Session = Depends(_get_db_session),
+    response: Response,
 ):
+    record = (
+        session.query(Subscription)
+        .filter(Subscription.license_key == license_record.key)
+        .filter(Subscription.category == payload.category)
+        .one_or_none()
+    )
+    if record:
+        record.webhook_url = str(payload.webhook_url)
+        record.min_irating = payload.min_irating
+        session.commit()
+        session.refresh(record)
+        response.status_code = status.HTTP_200_OK
+        return _subscription_to_response(record)
+
     record = Subscription(
         license_key=license_record.key,
         webhook_url=str(payload.webhook_url),
@@ -267,6 +282,7 @@ def create_subscription(
     session.add(record)
     session.commit()
     session.refresh(record)
+    response.status_code = status.HTTP_201_CREATED
     return _subscription_to_response(record)
 
 

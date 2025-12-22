@@ -13,7 +13,6 @@ let chart = null;
 const rangeHeader = document.getElementById('rangeHeader');
 const rangeText = document.getElementById('rangeText');
 const exportBtn = document.getElementById('export-csv');
-const subscriptionSection = document.getElementById('subscription');
 
 let lastRows = [];
 let sortState = { key: null, dir: 'desc' };
@@ -95,7 +94,6 @@ async function checkLicense(key) {
         if (data.valid && data.active) {
             licenseKey = key;
             dashboard.classList.remove('hidden');
-            subscriptionSection.classList.remove('hidden');
             setStatus('License active. Dashboard unlocked.', true);
             sessionStorage.setItem('ARMS-License-Key', key)
             auth.hidden = true;

@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from .auth import require_license
+from .auth import get_active_license, require_license
 from .db import get_session
 from .models import License, Member, Subscription
 from .license_repository import (
@@ -36,34 +36,6 @@ def _require_admin(admin_secret: str | None = Header(None, alias="X-Admin-Secret
     configured = settings.license_admin_secret
     if configured and admin_secret != configured:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-
-
-def _extract_license_token(
-    x_license_key: str | None, authorization: str | None
-) -> str | None:
-    if x_license_key:
-        return x_license_key.strip()
-
-    if authorization:
-        token = authorization.strip()
-        if token.lower().startswith("bearer "):
-            return token[7:].strip()
-        return token
-
-    return None
-
-
-def _get_license_token(
-    x_license_key: str | None = Header(None, alias="X-License-Key"),
-    authorization: str | None = Header(None, alias="Authorization"),
-) -> str:
-    token = _extract_license_token(x_license_key, authorization)
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing license token",
-        )
-    return token
 
 
 def _get_db_session() -> Session:
@@ -274,11 +246,11 @@ async def leaders_growers(
 @router.post("/subscriptions", response_model=SubscriptionResponse, status_code=201)
 def create_subscription(
     payload: SubscriptionCreate,
-    license_key: str = Depends(_get_license_token),
+    license_record: License = Depends(get_active_license),
     session: Session = Depends(_get_db_session),
 ):
     record = Subscription(
-        license_key=license_key,
+        license_key=license_record.key,
         webhook_url=str(payload.webhook_url),
         category=payload.category,
         min_irating=payload.min_irating,
@@ -292,13 +264,13 @@ def create_subscription(
 @router.delete("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
 def delete_subscription(
     subscription_id: int,
-    license_key: str = Depends(_get_license_token),
+    license_record: License = Depends(get_active_license),
     session: Session = Depends(_get_db_session),
 ):
     record = (
         session.query(Subscription)
         .filter(Subscription.id == subscription_id)
-        .filter(Subscription.license_key == license_key)
+        .filter(Subscription.license_key == license_record.key)
         .one_or_none()
     )
     if not record:

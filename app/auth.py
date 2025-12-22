@@ -43,23 +43,13 @@ def _unauthorized(detail: str) -> HTTPException:
     )
 
 
-def require_license(
+def get_active_license(
     request: Request,
     session: Session = Depends(_get_db_session),
     x_license_key: str | None = Header(None, alias="X-License-Key"),
     authorization: str | None = Header(None, alias="Authorization"),
-) -> None:
-    """Validate the incoming request includes an active license key."""
-
-    if request.url.path in EXEMPT_PATHS:
-        return
-
-    if not settings.license_admin_secret:
-        return
-
-    if request.url.path.startswith("/admin") or request.url.path.startswith("/licenses/"):
-        return
-
+) -> License:
+    """Return the active license record for the request or raise unauthorized."""
     token = _extract_license_token(x_license_key, authorization)
     if not token:
         logger.warning("License validation failed: missing token", extra={"path": request.url.path})
@@ -77,6 +67,32 @@ def require_license(
         "License validation succeeded",
         extra={"path": request.url.path, "license_key": token, "label": record.label},
     )
+    return record
 
 
-__all__ = ["require_license"]
+def require_license(
+    request: Request,
+    session: Session = Depends(_get_db_session),
+    x_license_key: str | None = Header(None, alias="X-License-Key"),
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> None:
+    """Validate the incoming request includes an active license key."""
+
+    if request.url.path in EXEMPT_PATHS:
+        return
+
+    if not settings.license_admin_secret:
+        return
+
+    if request.url.path.startswith("/admin") or request.url.path.startswith("/licenses/"):
+        return
+
+    get_active_license(
+        request,
+        session=session,
+        x_license_key=x_license_key,
+        authorization=authorization,
+    )
+
+
+__all__ = ["get_active_license", "require_license"]

@@ -255,9 +255,9 @@ async def leaders_growers(
 @router.post("/subscriptions", response_model=SubscriptionResponse, status_code=201)
 def create_subscription(
     payload: SubscriptionCreate,
+    response: Response,
     license_record: License = Depends(get_active_license),
     session: Session = Depends(_get_db_session),
-    response: Response,
 ):
     record = (
         session.query(Subscription)

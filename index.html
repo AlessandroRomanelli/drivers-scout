@@ -71,10 +71,44 @@
             </div>
         </div>
     </section>
+
+    <section id="subscription" style="margin-top:1rem;">
+        <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+            <button id="open-subscription">Register subscription</button>
+            <div id="sub-status" class="status" style="min-width:240px;"></div>
+        </div>
+
+        <div id="sub-form" class="card hidden" style="margin-top:0.75rem;">
+            <h3 style="margin-top:0;">Webhook subscription</h3>
+
+            <div class="filters">
+                <label>Webhook URL
+                    <input id="sub-webhook-url" placeholder="https://example.com/webhook" />
+                </label>
+
+                <label>Category
+                    <select id="sub-category">
+                        <option value="sports_car">sports_car</option>
+                        <option value="formula_car">formula_car</option>
+                    </select>
+                </label>
+
+                <label>Min iRating
+                    <input id="sub-min-ir" type="number" min="0" placeholder="e.g. 3000" />
+                </label>
+
+                <div style="display:flex; gap:0.5rem; align-items:end;">
+                    <button id="sub-save">Save</button>
+                    <button id="sub-cancel" type="button" style="background:#1f3b57;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </section>
     <footer style="margin-top:2rem; padding:1rem 0; text-align:center; color:#94a3b8; font-size:0.9rem;">
         © <span id="year"></span> AR Media Solutions. All rights reserved.
     </footer>
 </main>
 <script src="./assets/index.js"></script>
+<script src="./assets/subscription.js"></script>
 </body>
 </html>

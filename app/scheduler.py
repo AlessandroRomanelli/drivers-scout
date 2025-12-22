@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date, datetime, timezone
+from dataclasses import dataclass
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -30,6 +32,13 @@ IRACING_WEEK_EPOCH = datetime(2025, 12, 16, tzinfo=timezone.utc)
 scheduler = AsyncIOScheduler(timezone=SCHEDULE_TIMEZONE)
 
 
+@dataclass(frozen=True)
+class DiscordDeliveryResult:
+    status: Literal["ok", "not_found", "inactive"]
+    delivered: int = 0
+    message: str | None = None
+
+
 async def scheduled_job() -> None:
     logger.info(
         "Starting scheduled fetch run: sports_car followed by formula_car with delay"
@@ -46,22 +55,47 @@ async def scheduled_job() -> None:
     )
 
 
-async def deliver_discord_subscriptions() -> None:
+async def deliver_discord_subscriptions(
+    subscription_id: int | None = None,
+) -> DiscordDeliveryResult:
     logger.info("Starting scheduled Discord subscription delivery")
     with get_session() as session:
-        subscriptions = session.execute(
-            select(Subscription, License).join(
-                License, Subscription.license_key == License.key
-            )
+        query = (
+            select(Subscription, License)
+            .join(License, Subscription.license_key == License.key)
             .filter(License.active.is_(True))
             .filter(License.revoked_at.is_(None))
-        ).all()
+        )
+        if subscription_id is not None:
+            query = query.filter(Subscription.id == subscription_id)
+        subscriptions = session.execute(query).all()
 
     if not subscriptions:
-        logger.info("No subscriptions found to deliver")
-        return
+        if subscription_id is not None:
+            with get_session() as session:
+                inactive = session.execute(
+                    select(Subscription, License)
+                    .join(License, Subscription.license_key == License.key)
+                    .filter(Subscription.id == subscription_id)
+                ).first()
+            if inactive:
+                subscription, license_record = inactive
+                message = (
+                    "Subscription license inactive"
+                    if not license_record.active
+                    else "Subscription license revoked"
+                )
+                logger.info("Subscription %s skipped: %s", subscription.id, message)
+                return DiscordDeliveryResult(status="inactive", message=message)
+            message = "No subscriptions found to deliver"
+            logger.info(message)
+            return DiscordDeliveryResult(status="not_found", message=message)
+        message = "No subscriptions found to deliver"
+        logger.info(message)
+        return DiscordDeliveryResult(status="ok", message=message)
 
     async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+        delivered = 0
         for subscription, license_record in subscriptions:
             try:
                 data = await get_top_growers(
@@ -118,6 +152,8 @@ async def deliver_discord_subscriptions() -> None:
                         response.status_code,
                         response.text,
                     )
+                else:
+                    delivered += 1
             except Exception:
                 logger.exception(
                     "Discord subscription delivery failed for subscription %s",
@@ -125,6 +161,7 @@ async def deliver_discord_subscriptions() -> None:
                 )
 
     logger.info("Discord subscription delivery run complete")
+    return DiscordDeliveryResult(status="ok", delivered=delivered)
 
 
 def _iracing_week(now: datetime) -> int:

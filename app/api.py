@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from .auth import require_license
 from .db import get_session
-from .models import License, Member
+from .models import License, Member, Subscription
 from .license_repository import (
     activate_license,
     create_unique_license,
@@ -17,6 +17,7 @@ from .license_repository import (
     list_licenses,
     revoke_license,
 )
+from .schemas import SubscriptionCreate, SubscriptionResponse
 from .services import (
     fetch_and_store,
     get_irating_delta,
@@ -35,6 +36,34 @@ def _require_admin(admin_secret: str | None = Header(None, alias="X-Admin-Secret
     configured = settings.license_admin_secret
     if configured and admin_secret != configured:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
+
+def _extract_license_token(
+    x_license_key: str | None, authorization: str | None
+) -> str | None:
+    if x_license_key:
+        return x_license_key.strip()
+
+    if authorization:
+        token = authorization.strip()
+        if token.lower().startswith("bearer "):
+            return token[7:].strip()
+        return token
+
+    return None
+
+
+def _get_license_token(
+    x_license_key: str | None = Header(None, alias="X-License-Key"),
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> str:
+    token = _extract_license_token(x_license_key, authorization)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing license token",
+        )
+    return token
 
 
 def _get_db_session() -> Session:
@@ -141,6 +170,10 @@ def activate_license_key(
     return license_to_dict(record)
 
 
+def _subscription_to_response(subscription: Subscription) -> SubscriptionResponse:
+    return SubscriptionResponse.model_validate(subscription)
+
+
 @router.get("/members/search")
 def search_members(
     q: str = Query(..., min_length=3, description="Partial member display name"),
@@ -236,3 +269,41 @@ async def leaders_growers(
         "start_date_used": data.get("start_date_used"),
         "end_date_used": data.get("end_date_used")
     }
+
+
+@router.post("/subscriptions", response_model=SubscriptionResponse, status_code=201)
+def create_subscription(
+    payload: SubscriptionCreate,
+    license_key: str = Depends(_get_license_token),
+    session: Session = Depends(_get_db_session),
+):
+    record = Subscription(
+        license_key=license_key,
+        webhook_url=str(payload.webhook_url),
+        category=payload.category,
+        min_irating=payload.min_irating,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return _subscription_to_response(record)
+
+
+@router.delete("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
+def delete_subscription(
+    subscription_id: int,
+    license_key: str = Depends(_get_license_token),
+    session: Session = Depends(_get_db_session),
+):
+    record = (
+        session.query(Subscription)
+        .filter(Subscription.id == subscription_id)
+        .filter(Subscription.license_key == license_key)
+        .one_or_none()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    response = _subscription_to_response(record)
+    session.delete(record)
+    session.commit()
+    return response

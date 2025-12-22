@@ -383,6 +383,75 @@ function loadFiltersFromSession() {
     }
 }
 
+function getNextTuesdayUtc(fromDate = new Date()) {
+    const utcDay = fromDate.getUTCDay();
+    const isTuesday = utcDay === 2;
+    const pastMidnight =
+        fromDate.getUTCHours() > 0 ||
+        fromDate.getUTCMinutes() > 0 ||
+        fromDate.getUTCSeconds() > 0 ||
+        fromDate.getUTCMilliseconds() > 0;
+    let daysUntil = (2 - utcDay + 7) % 7;
+
+    if (isTuesday && pastMidnight) {
+        daysUntil = 7;
+    }
+
+    return new Date(Date.UTC(
+        fromDate.getUTCFullYear(),
+        fromDate.getUTCMonth(),
+        fromDate.getUTCDate() + daysUntil,
+        0, 0, 0, 0
+    ));
+}
+
+function startNextTuesdayCountdown() {
+    const countdown = document.getElementById('next-tuesday-countdown');
+    if (!countdown) return;
+
+    const valueNodes = {
+        days: countdown.querySelector('[data-unit="days"]'),
+        hours: countdown.querySelector('[data-unit="hours"]'),
+        minutes: countdown.querySelector('[data-unit="minutes"]'),
+        seconds: countdown.querySelector('[data-unit="seconds"]')
+    };
+
+    if (!valueNodes.days || !valueNodes.hours || !valueNodes.minutes || !valueNodes.seconds) {
+        return;
+    }
+
+    let nextTarget = getNextTuesdayUtc();
+
+    const render = deltaMs => {
+        const totalSeconds = Math.max(0, Math.floor(deltaMs / 1000));
+        const days = Math.floor(totalSeconds / 86400);
+        const hours = Math.floor((totalSeconds % 86400) / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        valueNodes.days.textContent = String(days);
+        valueNodes.hours.textContent = String(hours).padStart(2, '0');
+        valueNodes.minutes.textContent = String(minutes).padStart(2, '0');
+        valueNodes.seconds.textContent = String(seconds).padStart(2, '0');
+    };
+
+    const tick = () => {
+        const now = new Date();
+        const delta = nextTarget.getTime() - now.getTime();
+
+        if (delta <= 0) {
+            render(0);
+            nextTarget = getNextTuesdayUtc(new Date(now.getTime() + 1000));
+            return;
+        }
+
+        render(delta);
+    };
+
+    tick();
+    setInterval(tick, 1000);
+}
+
 const TAB_KEY = 'drivers-scout-active-tab';
 
 function setActiveTab(tabId) {
@@ -396,6 +465,7 @@ function setActiveTab(tabId) {
 }
 
 setActiveTab(localStorage.getItem(TAB_KEY) || 'tab-search');
+startNextTuesdayCountdown();
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));

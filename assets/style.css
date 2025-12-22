@@ -185,3 +185,55 @@ th.sortable.desc::after { content: ' ↓'; }
         }
     }
 }
+
+.countdown {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin: 0 0 1rem;
+    border-radius: 10px;
+    border: 1px solid #1f3b57;
+    background: #0f1f32;
+}
+
+.countdown-caption {
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.countdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 0.75rem;
+}
+
+.countdown-segment {
+    display: grid;
+    gap: 0.2rem;
+    text-align: center;
+}
+
+.countdown-value {
+    font-size: 1.6rem;
+    font-weight: bold;
+    color: #7dd3fc;
+    animation: countdown-pulse 2.8s ease-in-out infinite;
+}
+
+.countdown-label {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.65rem;
+    color: #94a3b8;
+}
+
+@keyframes countdown-pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.85;
+        transform: scale(1.02);
+    }
+}

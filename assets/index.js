@@ -8,7 +8,7 @@ const dashboard = document.getElementById('dashboard');
 const runQuery = document.getElementById('run-query');
 const tableBody = document.querySelector('#table tbody');
 const results = document.getElementById('results');
-let licenseKey = sessionStorage.getItem('ARMS-License-Key');
+let licenseKey = localStorage.getItem('ARMS-License-Key');
 let chart = null;
 const rangeHeader = document.getElementById('rangeHeader');
 const rangeText = document.getElementById('rangeText');
@@ -95,7 +95,7 @@ async function checkLicense(key) {
             licenseKey = key;
             dashboard.classList.remove('hidden');
             setStatus('License active. Dashboard unlocked.', true);
-            sessionStorage.setItem('ARMS-License-Key', key)
+            localStorage.setItem('ARMS-License-Key', key)
             auth.hidden = true;
         } else {
             dashboard.classList.add('hidden');
@@ -287,11 +287,11 @@ function saveFiltersToSession() {
         limit: document.getElementById('limit').value,
         minIr: document.getElementById('minIr').value
     };
-    sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
 }
 
 function loadFiltersFromSession() {
-    const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+    const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
     if (!raw) return;
 
     try {
@@ -308,7 +308,7 @@ function loadFiltersFromSession() {
 const TAB_KEY = 'drivers-scout-active-tab';
 
 function setActiveTab(tabId) {
-    sessionStorage.setItem(TAB_KEY, tabId);
+    localStorage.setItem(TAB_KEY, tabId);
 
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -317,7 +317,7 @@ function setActiveTab(tabId) {
     document.querySelector(`.tab-btn[data-tab="${tabId}"]`).classList.add('active');
 }
 
-setActiveTab(sessionStorage.getItem(TAB_KEY) || 'tab-search');
+setActiveTab(localStorage.getItem(TAB_KEY) || 'tab-search');
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));

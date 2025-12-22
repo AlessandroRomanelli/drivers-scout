@@ -18,6 +18,7 @@ from .license_repository import (
     revoke_license,
 )
 from .schemas import SubscriptionCreate, SubscriptionResponse
+from .scheduler import deliver_discord_subscriptions
 from .services import (
     fetch_and_store,
     get_irating_delta,
@@ -96,6 +97,14 @@ async def run_fetch_now(category: str | None = Query(None)):
 async def sync_members():
     count = await sync_members_from_snapshots_async()
     return {"upserted": count}
+
+
+@public_router.post(
+    "/admin/discord-subscriptions/run", dependencies=[Depends(_require_admin)]
+)
+async def run_discord_subscriptions():
+    await deliver_discord_subscriptions()
+    return {"status": "ok"}
 
 
 @public_router.post("/admin/licenses", dependencies=[Depends(_require_admin)])

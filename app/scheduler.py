@@ -97,11 +97,9 @@ async def deliver_discord_subscriptions() -> None:
                     driver = item.get("driver") or "Unknown Driver"
                     embed["fields"].append(
                         {
-                            "name": f"{index}. {driver}",
+                            "name": f"{index}. :flag_{item.get('location').lower() or 'aq'}: {driver}",
                             "value": (
-                                f"driver: :flag_{item.get('location').lower() or 'aq'}: {driver}\n"
-                                f"iRating: {item.get('end_value')}\n"
-                                f"Gain: {item.get('delta')}\n"
+                                f"iRating: {item.get('end_value')} (+{item.get('delta')})\n"
                                 f"wins/starts: {item.get('wins')}/{item.get('starts')}"
                             ),
                             "inline": False,

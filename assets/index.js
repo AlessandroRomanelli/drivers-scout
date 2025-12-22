@@ -8,7 +8,10 @@ const dashboard = document.getElementById('dashboard');
 const runQuery = document.getElementById('run-query');
 const tableBody = document.querySelector('#table tbody');
 const results = document.getElementById('results');
-let licenseKey = sessionStorage.getItem('ARMS-License-Key');
+const LICENSE_STORAGE_KEY = 'ARMS-License-Key';
+const LICENSE_DB_NAME = 'drivers-scout';
+const LICENSE_STORE = 'settings';
+let licenseKey = null;
 let chart = null;
 const rangeHeader = document.getElementById('rangeHeader');
 const rangeText = document.getElementById('rangeText');
@@ -16,6 +19,46 @@ const exportBtn = document.getElementById('export-csv');
 
 let lastRows = [];
 let sortState = { key: null, dir: 'desc' };
+
+function openLicenseDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(LICENSE_DB_NAME, 1);
+        request.onupgradeneeded = event => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(LICENSE_STORE)) {
+                db.createObjectStore(LICENSE_STORE);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function getStoredLicenseKey() {
+    const db = await openLicenseDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(LICENSE_STORE, 'readonly');
+        const store = tx.objectStore(LICENSE_STORE);
+        const request = store.get(LICENSE_STORAGE_KEY);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+        tx.oncomplete = () => db.close();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function setStoredLicenseKey(key) {
+    const db = await openLicenseDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(LICENSE_STORE, 'readwrite');
+        const store = tx.objectStore(LICENSE_STORE);
+        const request = store.put(key, LICENSE_STORAGE_KEY);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+        tx.oncomplete = () => db.close();
+        tx.onerror = () => reject(tx.error);
+    });
+}
 
 function sortRows(rows, key, dir) {
     const factor = dir === 'asc' ? 1 : -1;
@@ -95,7 +138,7 @@ async function checkLicense(key) {
             licenseKey = key;
             dashboard.classList.remove('hidden');
             setStatus('License active. Dashboard unlocked.', true);
-            sessionStorage.setItem('ARMS-License-Key', key)
+            await setStoredLicenseKey(key);
             auth.hidden = true;
         } else {
             dashboard.classList.add('hidden');
@@ -287,11 +330,11 @@ function saveFiltersToSession() {
         limit: document.getElementById('limit').value,
         minIr: document.getElementById('minIr').value
     };
-    sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
 }
 
 function loadFiltersFromSession() {
-    const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+    const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
     if (!raw) return;
 
     try {
@@ -304,6 +347,24 @@ function loadFiltersFromSession() {
         console.warn('Failed to load filters from session storage', e);
     }
 }
+
+const TAB_KEY = 'drivers-scout-active-tab';
+
+function setActiveTab(tabId) {
+    localStorage.setItem(TAB_KEY, tabId);
+
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+    document.getElementById(tabId).classList.remove('hidden');
+    document.querySelector(`.tab-btn[data-tab="${tabId}"]`).classList.add('active');
+}
+
+setActiveTab(localStorage.getItem(TAB_KEY) || 'tab-search');
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+});
 
 licenseCheck.addEventListener('click', () => checkLicense(licenseInput.value.trim()));
 runQuery.addEventListener('click', () => {
@@ -332,7 +393,22 @@ document.querySelectorAll('th.sortable').forEach(th => {
 });
 
 document.getElementById('year').textContent = new Date().getFullYear();
-checkLicense(licenseKey);
-loadFiltersFromSession();
 
+async function initLicense() {
+    try {
+        licenseKey = await getStoredLicenseKey();
+        if (licenseKey) {
+            licenseInput.value = licenseKey;
+            await checkLicense(licenseKey);
+        } else {
+            setStatus('Enter a license key');
+        }
+    } catch (error) {
+        console.error('Failed to load stored license key', error);
+        setStatus('Enter a license key');
+    }
+}
+
+loadFiltersFromSession();
+initLicense();
 

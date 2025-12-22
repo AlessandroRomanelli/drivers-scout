@@ -170,3 +170,18 @@ th.sortable::after {
 
 th.sortable.asc::after { content: ' ↑'; }
 th.sortable.desc::after { content: ' ↓'; }
+
+.tabs {
+    margin-bottom: 1rem;
+    button {
+        transition: 0.2s ease-in-out;
+    }
+
+    button:not(.active) {
+        opacity: 0.25;
+        &:hover {
+            opacity: 0.9;
+            cursor: pointer;
+        }
+    }
+}

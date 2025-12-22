@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -36,4 +36,23 @@ class License(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-__all__ = ["Base", "License", "Member"]
+class Subscription(Base):
+    """Webhook subscription for license-driven notifications."""
+
+    __tablename__ = "subscriptions"
+    __table_args__ = (
+        UniqueConstraint("license_key", "category", name="uq_subscriptions_license_category"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    license_key: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("licenses.key", ondelete="CASCADE"),
+        index=True,
+    )
+    webhook_url: Mapped[str] = mapped_column(String(500), index=True)
+    category: Mapped[str] = mapped_column(String(64))
+    min_irating: Mapped[int | None] = mapped_column(Integer)
+
+
+__all__ = ["Base", "License", "Member", "Subscription"]

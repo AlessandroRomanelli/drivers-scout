@@ -4,12 +4,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from .auth import require_license
+from .auth import get_active_license, require_license
 from .db import get_session
-from .models import License, Member
+from .models import License, Member, Subscription
 from .license_repository import (
     activate_license,
     create_unique_license,
@@ -17,6 +17,8 @@ from .license_repository import (
     list_licenses,
     revoke_license,
 )
+from .schemas import SubscriptionCreate, SubscriptionResponse
+from .scheduler import deliver_discord_subscriptions
 from .services import (
     fetch_and_store,
     get_irating_delta,
@@ -97,6 +99,22 @@ async def sync_members():
     return {"upserted": count}
 
 
+@public_router.post(
+    "/admin/discord-subscriptions/run", dependencies=[Depends(_require_admin)]
+)
+async def run_discord_subscriptions(
+    subscription_id: int = Query(..., ge=1),
+):
+    result = await deliver_discord_subscriptions(
+        subscription_id=subscription_id,
+    )
+    if result.status == "not_found":
+        raise HTTPException(status_code=404, detail=result.message or "Subscription not found")
+    if result.status == "inactive":
+        raise HTTPException(status_code=409, detail=result.message or "Subscription inactive")
+    return {"status": "ok", "delivered": result.delivered}
+
+
 @public_router.post("/admin/licenses", dependencies=[Depends(_require_admin)])
 def issue_license(
     label: str | None = Body(None, embed=True), session: Session = Depends(_get_db_session)
@@ -139,6 +157,24 @@ def activate_license_key(
     if not record:
         raise HTTPException(status_code=404, detail="License not found")
     return license_to_dict(record)
+
+
+def _subscription_to_response(subscription: Subscription) -> SubscriptionResponse:
+    return SubscriptionResponse.model_validate(subscription)
+
+
+@router.get("/subscriptions", response_model=list[SubscriptionResponse])
+def list_subscriptions(
+    license_record: License = Depends(get_active_license),
+    session: Session = Depends(_get_db_session),
+):
+    records = (
+        session.query(Subscription)
+        .filter(Subscription.license_key == license_record.key)
+        .order_by(Subscription.created_at.desc())
+        .all()
+    )
+    return [_subscription_to_response(record) for record in records]
 
 
 @router.get("/members/search")
@@ -236,3 +272,57 @@ async def leaders_growers(
         "start_date_used": data.get("start_date_used"),
         "end_date_used": data.get("end_date_used")
     }
+
+
+@router.post("/subscriptions", response_model=SubscriptionResponse, status_code=201)
+def create_subscription(
+    payload: SubscriptionCreate,
+    response: Response,
+    license_record: License = Depends(get_active_license),
+    session: Session = Depends(_get_db_session),
+):
+    record = (
+        session.query(Subscription)
+        .filter(Subscription.license_key == license_record.key)
+        .filter(Subscription.category == payload.category)
+        .one_or_none()
+    )
+    if record:
+        record.webhook_url = str(payload.webhook_url)
+        record.min_irating = payload.min_irating
+        session.commit()
+        session.refresh(record)
+        response.status_code = status.HTTP_200_OK
+        return _subscription_to_response(record)
+
+    record = Subscription(
+        license_key=license_record.key,
+        webhook_url=str(payload.webhook_url),
+        category=payload.category,
+        min_irating=payload.min_irating,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    response.status_code = status.HTTP_201_CREATED
+    return _subscription_to_response(record)
+
+
+@router.delete("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
+def delete_subscription(
+    subscription_id: int,
+    license_record: License = Depends(get_active_license),
+    session: Session = Depends(_get_db_session),
+):
+    record = (
+        session.query(Subscription)
+        .filter(Subscription.id == subscription_id)
+        .filter(Subscription.license_key == license_record.key)
+        .one_or_none()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    response = _subscription_to_response(record)
+    session.delete(record)
+    session.commit()
+    return response

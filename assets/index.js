@@ -16,9 +16,17 @@ let chart = null;
 const rangeHeader = document.getElementById('rangeHeader');
 const rangeText = document.getElementById('rangeText');
 const exportBtn = document.getElementById('export-csv');
+const paginationPrev = document.getElementById('pagination-prev');
+const paginationNext = document.getElementById('pagination-next');
+const paginationStatus = document.getElementById('pagination-status');
+const pageSizeSelect = document.getElementById('page-size');
 
 let lastRows = [];
+let displayRows = [];
 let sortState = { key: null, dir: 'desc' };
+let currentPage = 1;
+let pageSize = 20;
+let paginationRowsRef = null;
 
 function openLicenseDb() {
     return new Promise((resolve, reject) => {
@@ -155,6 +163,29 @@ function setLoading(isLoading) {
     runQuery.innerHTML = isLoading ? "Loading..." : "Load Gainers"
 }
 
+function getPagedRows(rows) {
+    const start = (currentPage - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+}
+
+function renderPagination(rows) {
+    if (paginationRowsRef !== rows) {
+        currentPage = 1;
+        paginationRowsRef = rows;
+    }
+
+    const totalPages = rows.length ? Math.ceil(rows.length / pageSize) : 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const displayPage = rows.length ? currentPage : 0;
+    const displayTotal = rows.length ? totalPages : 0;
+    paginationStatus.textContent = `Page ${displayPage} of ${displayTotal}`;
+
+    paginationPrev.disabled = currentPage <= 1 || rows.length === 0;
+    paginationNext.disabled = currentPage >= totalPages || rows.length === 0;
+    pageSizeSelect.value = String(pageSize);
+}
+
 async function loadGainers() {
     if (!licenseKey) {
         setStatus('Validate a license first');
@@ -180,6 +211,7 @@ async function loadGainers() {
     lastRows = data.results || []
     renderTimeRange(data.start_date_used, data.end_date_used);
     const rows = data.results || [];
+    displayRows = rows;
     exportBtn.onclick = () => {
         exportTableToCSV('drivers_scout_gainers.csv', rows);
     };
@@ -187,7 +219,8 @@ async function loadGainers() {
         results.hidden = false;
     }
     renderChart(rows);
-    renderTable(lastRows);
+    renderPagination(displayRows);
+    renderTable(displayRows);
     setLoading(false)
 }
 
@@ -233,8 +266,10 @@ function renderTable(rows) {
     tableBody.innerHTML = '';
 
     const smurfRegex = /\d/; // any digit anywhere in the name
+    const pagedRows = getPagedRows(rows);
+    const startIndex = (currentPage - 1) * pageSize;
 
-    rows.slice(0, 20).forEach((r, idx) => {
+    pagedRows.forEach((r, idx) => {
         const tr = document.createElement('tr');
 
         // Podium classes (only if not smurf; smurf should win visually)
@@ -255,7 +290,7 @@ function renderTable(rows) {
         const flag = r.location.toLowerCase()
 
         tr.innerHTML = `
-      <td>${idx + 1}</td>
+      <td>${startIndex + idx + 1}</td>
       <td><div class="driver"><img class="flag"
           src="https://flagcdn.com/20x15/${flag}.png"
           srcset="https://flagcdn.com/40x30/${flag}.png 2x,
@@ -388,8 +423,37 @@ document.querySelectorAll('th.sortable').forEach(th => {
         th.classList.add(sortState.dir);
 
         const sorted = sortRows(lastRows, key, sortState.dir);
+        displayRows = sorted;
+        renderPagination(sorted);
         renderTable(sorted);
     });
+});
+
+paginationPrev.addEventListener('click', () => {
+    if (currentPage > 1) {
+        currentPage -= 1;
+        renderTable(displayRows);
+        renderPagination(displayRows);
+    }
+});
+
+paginationNext.addEventListener('click', () => {
+    const totalPages = displayRows.length ? Math.ceil(displayRows.length / pageSize) : 1;
+    if (currentPage < totalPages) {
+        currentPage += 1;
+        renderTable(displayRows);
+        renderPagination(displayRows);
+    }
+});
+
+pageSizeSelect.addEventListener('change', event => {
+    const nextSize = Number(event.target.value);
+    if (!Number.isNaN(nextSize) && nextSize > 0) {
+        pageSize = nextSize;
+        currentPage = 1;
+        renderPagination(displayRows);
+        renderTable(displayRows);
+    }
 });
 
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -411,4 +475,3 @@ async function initLicense() {
 
 loadFiltersFromSession();
 initLicense();
-

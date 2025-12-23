@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -127,6 +128,10 @@ async def sync_members_from_snapshots_async() -> int:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _elapsed_ms(start: float) -> float:
+    return (time.perf_counter() - start) * 1000.0
 
 
 def _next_cache_expiry(now: datetime | None = None) -> datetime:
@@ -387,7 +392,20 @@ async def get_top_growers(
         if cached:
             expires_at = cached.get("expires_at")
             if isinstance(expires_at, datetime) and expires_at > now:
+                logger.debug(
+                    "Top growers cache hit: key=%s expires_at=%s",
+                    cache_key,
+                    expires_at,
+                )
                 return cached["payload"]
+            logger.debug(
+                "Top growers cache stale: key=%s expires_at=%s now=%s",
+                cache_key,
+                expires_at,
+                now,
+            )
+        else:
+            logger.debug("Top growers cache miss: key=%s", cache_key)
 
     client = IRacingClient()
     try:
@@ -405,6 +423,15 @@ async def get_top_growers(
             logger.warning("No starting snapshot found for %s", category)
             return {"results": [], "snapshot_age_days": None}
 
+        logger.debug(
+            "Top growers snapshot selection: category=%s start_path=%s end_path=%s start_used=%s end_used=%s",
+            category,
+            start_path,
+            end_path,
+            start_used,
+            end_used,
+        )
+
         normalized_start = start_used
         cache_key = (category, normalized_start, limit, min_current_irating)
         now = _utcnow()
@@ -413,11 +440,38 @@ async def get_top_growers(
             if cached:
                 expires_at = cached.get("expires_at")
                 if isinstance(expires_at, datetime) and expires_at > now:
+                    logger.debug(
+                        "Top growers cache hit: key=%s expires_at=%s",
+                        cache_key,
+                        expires_at,
+                    )
                     return cached["payload"]
+                logger.debug(
+                    "Top growers cache stale: key=%s expires_at=%s now=%s",
+                    cache_key,
+                    expires_at,
+                    now,
+                )
+            else:
+                logger.debug("Top growers cache miss: key=%s", cache_key)
 
         def _compute() -> List[Dict[str, object]]:
+            compute_start = time.perf_counter()
+            logger.debug("Top growers compute start: category=%s", category)
+            map_load_start = time.perf_counter()
+            logger.debug(
+                "Loading snapshot maps for top growers: start_path=%s end_path=%s",
+                start_path,
+                end_path,
+            )
             start_map = load_snapshot_map(start_path)
             end_map = load_snapshot_map(end_path)
+            logger.debug(
+                "Loaded snapshot maps for top growers: start_rows=%s end_rows=%s elapsed_ms=%.2f",
+                len(start_map),
+                len(end_map),
+                _elapsed_ms(map_load_start),
+            )
             results: List[Dict[str, object]] = []
             for cust_id, end_row in end_map.items():
                 end_ir = end_row.get("irating")
@@ -459,6 +513,12 @@ async def get_top_growers(
                     }
                 )
             results.sort(key=lambda item: item["delta"], reverse=True)
+            logger.debug(
+                "Top growers compute complete: category=%s results=%s elapsed_ms=%.2f",
+                category,
+                len(results),
+                _elapsed_ms(compute_start),
+            )
             return results[:limit]
 
         computed = await run_in_threadpool(_compute)

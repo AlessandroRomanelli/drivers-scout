@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import csv
+import io
 import logging
+import pickle
 from functools import lru_cache
 from datetime import date, datetime
 from pathlib import Path
@@ -27,9 +29,51 @@ def snapshot_path(category: str, snapshot_date: date) -> Path:
     return directory / f"{snapshot_date.isoformat()}.csv"
 
 
-def store_snapshot(category: str, snapshot_date: date, content: str) -> Path:
+def snapshot_map_path(category: str, snapshot_date: date) -> Path:
+    directory = snapshot_directory(category)
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / f"{snapshot_date.isoformat()}.pkl"
+
+
+def _snapshot_map_from_content(content: str) -> Dict[int, SnapshotRow]:
+    result: Dict[int, SnapshotRow] = {}
+    reader = csv.DictReader(io.StringIO(content))
+    for row in reader:
+        normalized = normalize_row(row)
+        cust_id = normalized.get("cust_id")
+        if isinstance(cust_id, int):
+            result[cust_id] = normalized
+    return result
+
+
+def store_snapshot_map(
+    category: str, snapshot_date: date, snapshot_map: Dict[int, SnapshotRow]
+) -> Path:
+    path = snapshot_map_path(category, snapshot_date)
+    path.write_bytes(pickle.dumps(snapshot_map, protocol=pickle.HIGHEST_PROTOCOL))
+    logger.info("Stored snapshot map for %s at %s", category, path)
+    return path
+
+
+def store_snapshot(
+    category: str,
+    snapshot_date: date,
+    content: str,
+    *,
+    emit_map: bool = True,
+) -> Path:
     path = snapshot_path(category, snapshot_date)
     path.write_text(content, encoding="utf-8")
+    if emit_map:
+        try:
+            snapshot_map = _snapshot_map_from_content(content)
+            store_snapshot_map(category, snapshot_date, snapshot_map)
+        except Exception:
+            logger.exception(
+                "Failed to store snapshot map for %s on %s",
+                category,
+                snapshot_date,
+            )
     logger.info("Stored snapshot for %s at %s", category, path)
     return path
 
@@ -89,3 +133,24 @@ def load_snapshot_map(path: Path) -> Dict[int, SnapshotRow]:
         if isinstance(cust_id, int):
             result[cust_id] = row
     return result
+
+
+@lru_cache(maxsize=64)
+def _load_snapshot_map_binary(path: str, mtime: float) -> Dict[int, SnapshotRow]:
+    with Path(path).open("rb") as handle:
+        return pickle.load(handle)
+
+
+def load_snapshot_map_cached(path: Path) -> Dict[int, SnapshotRow]:
+    binary_path = path.with_suffix(".pkl")
+    if binary_path.exists():
+        try:
+            return _load_snapshot_map_binary(
+                str(binary_path), binary_path.stat().st_mtime
+            )
+        except Exception:
+            logger.exception(
+                "Failed to load snapshot map from %s; falling back to CSV",
+                binary_path,
+            )
+    return load_snapshot_map(path)

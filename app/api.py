@@ -18,7 +18,7 @@ from .license_repository import (
     revoke_license,
 )
 from .schemas import SubscriptionCreate, SubscriptionResponse
-from .scheduler import deliver_discord_subscriptions
+from .scheduler import deliver_discord_subscriptions_guarded
 from .services import (
     fetch_and_store,
     get_irating_delta,
@@ -105,13 +105,15 @@ async def sync_members():
 async def run_discord_subscriptions(
     subscription_id: int = Query(..., ge=1),
 ):
-    result = await deliver_discord_subscriptions(
+    result = await deliver_discord_subscriptions_guarded(
         subscription_id=subscription_id,
     )
     if result.status == "not_found":
         raise HTTPException(status_code=404, detail=result.message or "Subscription not found")
     if result.status == "inactive":
         raise HTTPException(status_code=409, detail=result.message or "Subscription inactive")
+    if result.status == "busy":
+        raise HTTPException(status_code=409, detail=result.message or "Subscription delivery in progress")
     return {"status": "ok", "delivered": result.delivered}
 
 

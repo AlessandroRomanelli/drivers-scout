@@ -34,7 +34,7 @@ scheduler = AsyncIOScheduler(timezone=SCHEDULE_TIMEZONE)
 
 @dataclass(frozen=True)
 class DiscordDeliveryResult:
-    status: Literal["ok", "not_found", "inactive"]
+    status: Literal["ok", "not_found", "inactive", "busy"]
     delivered: int = 0
     message: str | None = None
 
@@ -160,6 +160,24 @@ async def deliver_discord_subscriptions(
     return DiscordDeliveryResult(status="ok", delivered=delivered)
 
 
+discord_delivery_lock = asyncio.Lock()
+
+
+async def deliver_discord_subscriptions_guarded(
+    subscription_id: int | None = None,
+) -> DiscordDeliveryResult:
+    try:
+        await asyncio.wait_for(discord_delivery_lock.acquire(), timeout=0)
+    except TimeoutError:
+        message = "Discord subscription delivery already in progress"
+        logger.info(message)
+        return DiscordDeliveryResult(status="busy", message=message)
+    try:
+        return await deliver_discord_subscriptions(subscription_id=subscription_id)
+    finally:
+        discord_delivery_lock.release()
+
+
 def _iracing_week(now: datetime) -> int:
     reference = now.astimezone(timezone.utc)
     weeks = int((reference - IRACING_WEEK_EPOCH).total_seconds() // (7 * 24 * 3600))
@@ -202,7 +220,7 @@ def start_scheduler() -> None:
         misfire_grace_time=None,
     )
     scheduler.add_job(
-        deliver_discord_subscriptions,
+        deliver_discord_subscriptions_guarded,
         trigger=CronTrigger(
             day_of_week="mon",
             hour=23,
@@ -211,6 +229,7 @@ def start_scheduler() -> None:
         ),
         name="deliver_discord_subscriptions",
         misfire_grace_time=None,
+        max_instances=1,
     )
     scheduler.start()
     if scheduler.running:

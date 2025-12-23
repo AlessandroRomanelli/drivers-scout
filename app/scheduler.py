@@ -59,6 +59,7 @@ async def scheduled_job() -> None:
 async def deliver_discord_subscriptions(
     subscription_id: int | None = None,
 ) -> DiscordDeliveryResult:
+    LOOKBACK_DAYS = 7
     logger.info("Starting scheduled Discord subscription delivery")
     with get_session() as session:
         query = (
@@ -123,13 +124,13 @@ async def deliver_discord_subscriptions(
                     "Fetching top growers for subscription %s: category=%s days=%s limit=%s min_irating=%s",
                     subscription.id,
                     subscription.category,
-                    6,
+                    LOOKBACK_DAYS,
                     10,
                     subscription.min_irating,
                 )
                 data = await get_top_growers(
                     subscription.category,
-                    days=6,
+                    days=LOOKBACK_DAYS,
                     limit=10,
                     min_current_irating=subscription.min_irating,
                 )
@@ -137,7 +138,7 @@ async def deliver_discord_subscriptions(
                     "Fetched top growers for subscription %s: category=%s days=%s limit=%s min_irating=%s",
                     subscription.id,
                     subscription.category,
-                    6,
+                    LOOKBACK_DAYS,
                     10,
                     subscription.min_irating,
                 )

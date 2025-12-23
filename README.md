@@ -56,3 +56,12 @@ curl "http://localhost:8000/leaders/growers?category=sports_car&days=30&limit=10
 - Snapshots are written as `{YYYY-MM-DD}.csv` files beneath `SNAPSHOTS_DIR/<category>`.
 - Scheduler uses APScheduler with fixed UTC schedule times.
 - Logging avoids sensitive credential data.
+
+## Snapshot conversion
+To (re)generate pickled snapshot maps alongside CSVs:
+
+```bash
+python scripts/convert_snapshots.py --root /path/to/snapshots
+python scripts/convert_snapshots.py --root /path/to/snapshots --category sports_car
+python scripts/convert_snapshots.py --root /path/to/snapshots --category sports_car --overwrite
+```

@@ -20,9 +20,10 @@ from .snapshots import (
     find_closest_snapshot,
     get_oldest_snapshot_date,
     list_snapshot_files,
-    load_snapshot_map,
+    load_snapshot_map_cached,
     load_snapshot_rows,
     parse_snapshot_date,
+    resolve_snapshot_path,
     snapshot_path,
     store_snapshot,
 )
@@ -161,12 +162,18 @@ async def _ensure_snapshot(
     client: IRacingClient,
     *,
     fetch_if_missing: bool,
+    require_csv: bool = False,
 ) -> Tuple[Path | None, date | None]:
     """Return snapshot path for target_date or the closest available."""
 
-    path = snapshot_path(category, target_date)
-    if path.exists():
-        return path, target_date
+    if require_csv:
+        csv_path = snapshot_path(category, target_date)
+        if csv_path.exists():
+            return csv_path, target_date
+    else:
+        resolved_path = resolve_snapshot_path(category, target_date)
+        if resolved_path:
+            return resolved_path, target_date
 
     if fetch_if_missing:
         try:
@@ -175,7 +182,11 @@ async def _ensure_snapshot(
         except Exception:
             logger.exception("Failed to fetch snapshot for %s on %s", category, target_date)
 
-    return find_closest_snapshot(category, target_date)
+    return find_closest_snapshot(
+        category,
+        target_date,
+        include_pkl=not require_csv,
+    )
 
 
 async def fetch_and_store(category: str | None = None) -> Dict[str, int]:
@@ -213,7 +224,11 @@ async def _get_member_row(
     try:
         target_date = target_date or date.today()
         path, resolved_date = await _ensure_snapshot(
-            category, target_date, client, fetch_if_missing=True
+            category,
+            target_date,
+            client,
+            fetch_if_missing=True,
+            require_csv=True,
         )
         if not path:
             return None, None
@@ -279,7 +294,7 @@ async def get_latest_snapshots(cust_ids: list[int], category: str) -> dict[str, 
         )
         if not path or not resolved_date:
             return None
-        snapshot_map = load_snapshot_map(path)
+        snapshot_map = load_snapshot_map_cached(path)
         results: list[dict[str, object]] = []
         missing: list[int] = []
         for cust_id in cust_ids:
@@ -336,8 +351,8 @@ async def get_irating_delta(
         if not start_path or not start_used:
             return None
 
-        start_map = load_snapshot_map(start_path)
-        end_map = load_snapshot_map(end_path)
+        start_map = load_snapshot_map_cached(start_path)
+        end_map = load_snapshot_map_cached(end_path)
         start_row = start_map.get(cust_id)
         end_row = end_map.get(cust_id)
         if not start_row or not end_row:
@@ -464,8 +479,8 @@ async def get_top_growers(
                 start_path,
                 end_path,
             )
-            start_map = load_snapshot_map(start_path)
-            end_map = load_snapshot_map(end_path)
+            start_map = load_snapshot_map_cached(start_path)
+            end_map = load_snapshot_map_cached(end_path)
             logger.debug(
                 "Loaded snapshot maps for top growers: start_rows=%s end_rows=%s elapsed_ms=%.2f",
                 len(start_map),

@@ -135,14 +135,13 @@ def load_snapshot_map(path: Path) -> Dict[int, SnapshotRow]:
     return result
 
 
-@lru_cache(maxsize=64)
 def _load_snapshot_map_binary(path: str, mtime: float) -> Dict[int, SnapshotRow]:
     with Path(path).open("rb") as handle:
         return pickle.load(handle)
 
 
 def load_snapshot_map_cached(path: Path) -> Dict[int, SnapshotRow]:
-    binary_path = path.with_suffix(".pkl")
+    binary_path = path.with_suffix(".pkl")  
     if binary_path.exists():
         try:
             return _load_snapshot_map_binary(

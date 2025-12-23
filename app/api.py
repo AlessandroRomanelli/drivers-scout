@@ -248,6 +248,19 @@ async def member_delta(
 ):
     if category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
+    if start or end:
+        if days is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide either days or start/end dates, not both.",
+            )
+        if not start or not end:
+            raise HTTPException(
+                status_code=400,
+                detail="Both start and end dates must be provided together.",
+            )
+    else:
+        days = days or 1
     result = await get_irating_delta(
         cust_id, category, days=days, start_date=start, end_date=end
     )
@@ -259,20 +272,42 @@ async def member_delta(
 @router.get("/leaders/growers")
 async def leaders_growers(
     category: str = Query("sports_car"),
-    days: int = Query(30, ge=1),
+    days: int | None = Query(None, ge=1),
+    start: Optional[date] = Query(None),
+    end: Optional[date] = Query(None),
     limit: int = Query(20, ge=1, le=100),
     min_current_irating: int | None = Query(None, ge=0),
 ):
     if category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
-    data = await get_top_growers(category, days, limit, min_current_irating)
+    if start or end:
+        if days is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide either days or start/end dates, not both.",
+            )
+        if not start or not end:
+            raise HTTPException(
+                status_code=400,
+                detail="Both start and end dates must be provided together.",
+            )
+    else:
+        days = days or 30
+    data = await get_top_growers(
+        category,
+        days=days,
+        limit=limit,
+        min_current_irating=min_current_irating,
+        start_date=start,
+        end_date=end,
+    )
     return {
         "category": category,
         "min_current_irating": min_current_irating,
         "results": data.get("results", []),
         "snapshot_age_days": data.get("snapshot_age_days"),
         "start_date_used": data.get("start_date_used"),
-        "end_date_used": data.get("end_date_used")
+        "end_date_used": data.get("end_date_used"),
     }
 
 

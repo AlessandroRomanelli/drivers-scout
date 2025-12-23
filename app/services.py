@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 _top_growers_cache: dict[
-    tuple[str, date, int, int | None],
+    tuple[str, date, date, int, int | None],
     dict[str, object],
 ] = {}
 _top_growers_cache_lock = asyncio.Lock()
@@ -383,24 +383,40 @@ async def get_irating_delta(
 
 
 async def get_top_growers(
-    category: str, days: int, limit: int, min_current_irating: int | None = None
+    category: str,
+    days: int | None,
+    limit: int,
+    min_current_irating: int | None = None,
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> Dict[str, object]:
-    end_date = date.today()
-    start_date = end_date - timedelta(days=days)
+    if start_date or end_date:
+        if not start_date or not end_date:
+            raise ValueError("start_date and end_date must be provided together.")
+        effective_start = start_date
+        effective_end = end_date
+    else:
+        if days is None:
+            raise ValueError("days must be provided when start/end dates are not set.")
+        effective_end = date.today()
+        effective_start = effective_end - timedelta(days=days)
 
     oldest_snapshot = get_oldest_snapshot_date(category)
-    if oldest_snapshot and start_date < oldest_snapshot:
-        start_date = oldest_snapshot
+    if oldest_snapshot and effective_start < oldest_snapshot:
+        effective_start = oldest_snapshot
 
     logger.info(
-        "Fetching top growers: category=%s days=%s limit=%s min_current_irating=%s",
+        "Fetching top growers: category=%s days=%s limit=%s min_current_irating=%s start_date=%s end_date=%s",
         category,
         days,
         limit,
         min_current_irating,
+        effective_start,
+        effective_end,
     )
 
-    cache_key = (category, start_date, limit, min_current_irating)
+    cache_key = (category, effective_start, effective_end, limit, min_current_irating)
     now = _utcnow()
     async with _top_growers_cache_lock:
         cached = _top_growers_cache.get(cache_key)
@@ -425,14 +441,14 @@ async def get_top_growers(
     client = IRacingClient()
     try:
         end_path, end_used = await _ensure_snapshot(
-            category, end_date, client, fetch_if_missing=True
+            category, effective_end, client, fetch_if_missing=True
         )
         if not end_path or not end_used:
             logger.warning("No snapshots available for %s", category)
             return {"results": [], "snapshot_age_days": None}
 
         start_path, start_used = await _ensure_snapshot(
-            category, start_date, client, fetch_if_missing=False
+            category, effective_start, client, fetch_if_missing=False
         )
         if not start_path or not start_used:
             logger.warning("No starting snapshot found for %s", category)
@@ -448,7 +464,14 @@ async def get_top_growers(
         )
 
         normalized_start = start_used
-        cache_key = (category, normalized_start, limit, min_current_irating)
+        normalized_end = end_used
+        cache_key = (
+            category,
+            normalized_start,
+            normalized_end,
+            limit,
+            min_current_irating,
+        )
         now = _utcnow()
         async with _top_growers_cache_lock:
             cached = _top_growers_cache.get(cache_key)

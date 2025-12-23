@@ -645,19 +645,19 @@ paths:
           schema:
             type: integer
             minimum: 1
-          description: Convenience window size. When provided, start date is derived from end date minus days.
+          description: Convenience window size. Required unless start/end dates are provided.
         - in: query
           name: start
           schema:
             type: string
             format: date
-          description: Explicit start date (YYYY-MM-DD).
+          description: Explicit start date (YYYY-MM-DD). Requires end and cannot be used with days.
         - in: query
           name: end
           schema:
             type: string
             format: date
-          description: Explicit end date (YYYY-MM-DD). Defaults to today.
+          description: Explicit end date (YYYY-MM-DD). Requires start and cannot be used with days.
       responses:
         '200':
           description: Delta between the two snapshots.
@@ -689,6 +689,19 @@ paths:
             type: integer
             minimum: 1
             default: 30
+          description: Lookback window in days. Required unless start/end dates are provided.
+        - in: query
+          name: start
+          schema:
+            type: string
+            format: date
+          description: Explicit start date (YYYY-MM-DD). Requires end and cannot be used with days.
+        - in: query
+          name: end
+          schema:
+            type: string
+            format: date
+          description: Explicit end date (YYYY-MM-DD). Requires start and cannot be used with days.
         - in: query
           name: limit
           schema:

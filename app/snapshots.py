@@ -34,6 +34,16 @@ def snapshot_map_path(category: str, snapshot_date: date) -> Path:
     return directory / f"{snapshot_date.isoformat()}.pkl"
 
 
+def resolve_snapshot_path(category: str, snapshot_date: date) -> Path | None:
+    csv_path = snapshot_path(category, snapshot_date)
+    if csv_path.exists():
+        return csv_path
+    map_path = snapshot_map_path(category, snapshot_date)
+    if map_path.exists():
+        return map_path
+    return None
+
+
 def _snapshot_map_from_content(content: str) -> Dict[int, SnapshotRow]:
     result: Dict[int, SnapshotRow] = {}
     reader = csv.DictReader(io.StringIO(content))
@@ -84,6 +94,15 @@ def list_snapshot_files(category: str) -> list[Path]:
     return sorted(directory.glob("*.csv"))
 
 
+def list_snapshot_assets(category: str) -> list[Path]:
+    directory = snapshot_directory(category)
+    if not directory.exists():
+        return []
+    paths = list(directory.glob("*.csv"))
+    paths.extend(directory.glob("*.pkl"))
+    return sorted(paths)
+
+
 def parse_snapshot_date(path: Path) -> date | None:
     try:
         return datetime.strptime(path.stem, "%Y-%m-%d").date()
@@ -94,7 +113,7 @@ def parse_snapshot_date(path: Path) -> date | None:
 
 def get_oldest_snapshot_date(category: str) -> date | None:
     oldest: date | None = None
-    for path in list_snapshot_files(category):
+    for path in list_snapshot_assets(category):
         snapshot_date = parse_snapshot_date(path)
         if snapshot_date is None:
             continue
@@ -103,9 +122,15 @@ def get_oldest_snapshot_date(category: str) -> date | None:
     return oldest
 
 
-def find_closest_snapshot(category: str, target_date: date) -> Tuple[Path | None, date | None]:
+def find_closest_snapshot(
+    category: str,
+    target_date: date,
+    *,
+    include_pkl: bool = True,
+) -> Tuple[Path | None, date | None]:
     candidates: list[tuple[int, Path, date]] = []
-    for path in list_snapshot_files(category):
+    paths = list_snapshot_assets(category) if include_pkl else list_snapshot_files(category)
+    for path in paths:
         snapshot_date = parse_snapshot_date(path)
         if not snapshot_date:
             continue

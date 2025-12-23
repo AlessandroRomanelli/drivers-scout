@@ -231,7 +231,7 @@ async def deliver_discord_subscriptions_guarded(
     subscription_id: int | None = None,
 ) -> DiscordDeliveryResult:
     try:
-        await asyncio.wait_for(discord_delivery_lock.acquire(), timeout=0)
+        await asyncio.wait_for(discord_delivery_lock.acquire(), timeout=1)
     except TimeoutError:
         message = "Discord subscription delivery already in progress"
         logger.info(message)

@@ -5,11 +5,52 @@ import argparse
 import logging
 import pickle
 from pathlib import Path
+from typing import Dict, Iterator, Tuple
+import csv
+from datetime import date, datetime
 
-from app import snapshots
-
+SnapshotRow = Dict[str, object]
 
 logger = logging.getLogger(__name__)
+
+def normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract typed fields from a CSV row with parsed values."""
+
+    def parse_int(key: str) -> int | None:
+        try:
+            return int(row.get(key, ""))
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "cust_id": parse_int("CUSTID"),
+        "display_name": row.get("DRIVER"),
+        "location": row.get("LOCATION"),
+        "irating": parse_int("IRATING"),
+        "starts": parse_int("STARTS"),
+        "wins": parse_int("WINS"),
+    }
+
+def load_snapshot_rows(path: Path) -> Iterator[SnapshotRow]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            yield normalize_row(row)
+
+def parse_snapshot_date(path: Path) -> date | None:
+    try:
+        return datetime.strptime(path.stem, "%Y-%m-%d").date()
+    except ValueError:
+        logger.warning("Skipping snapshot with unexpected name: %s", path.name)
+        return None
+    
+def load_snapshot_map(path: Path) -> Dict[int, SnapshotRow]:
+    result: Dict[int, SnapshotRow] = {}
+    for row in load_snapshot_rows(path):
+        cust_id = row.get("cust_id")
+        if isinstance(cust_id, int):
+            result[cust_id] = row
+    return result
 
 
 def _iter_csv_paths(root: Path) -> list[Path]:
@@ -20,7 +61,7 @@ def _iter_csv_paths(root: Path) -> list[Path]:
 
 
 def _convert_path(path: Path, *, overwrite: bool) -> None:
-    snapshot_date = snapshots.parse_snapshot_date(path)
+    snapshot_date = parse_snapshot_date(path)
     if snapshot_date is None:
         return
     output_path = path.with_suffix(".pkl")
@@ -28,7 +69,7 @@ def _convert_path(path: Path, *, overwrite: bool) -> None:
         logger.info("Skipping existing snapshot map: %s", output_path)
         return
     try:
-        snapshot_map = snapshots.load_snapshot_map(path)
+        snapshot_map = load_snapshot_map(path)
     except Exception:
         logger.exception("Failed to load snapshot CSV: %s", path)
         return

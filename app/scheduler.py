@@ -6,6 +6,7 @@ import logging
 from datetime import date, datetime, timezone
 from dataclasses import dataclass
 from typing import Literal
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -70,6 +71,11 @@ async def deliver_discord_subscriptions(
             query = query.filter(Subscription.id == subscription_id)
         subscriptions = session.execute(query).all()
 
+    logger.debug(
+        "Discord subscription delivery run starting: subscription_id=%s total=%s",
+        subscription_id,
+        len(subscriptions),
+    )
     if not subscriptions:
         if subscription_id is not None:
             with get_session() as session:
@@ -86,23 +92,54 @@ async def deliver_discord_subscriptions(
                     else "Subscription license revoked"
                 )
                 logger.info("Subscription %s skipped: %s", subscription.id, message)
+                logger.debug(
+                    "Discord subscription delivery run complete: subscription_id=%s total=%s",
+                    subscription_id,
+                    len(subscriptions),
+                )
                 return DiscordDeliveryResult(status="inactive", message=message)
             message = "No subscriptions found to deliver"
             logger.info(message)
+            logger.debug(
+                "Discord subscription delivery run complete: subscription_id=%s total=%s",
+                subscription_id,
+                len(subscriptions),
+            )
             return DiscordDeliveryResult(status="not_found", message=message)
         message = "No subscriptions found to deliver"
         logger.info(message)
+        logger.debug(
+            "Discord subscription delivery run complete: subscription_id=%s total=%s",
+            subscription_id,
+            len(subscriptions),
+        )
         return DiscordDeliveryResult(status="ok", message=message)
 
     async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
         delivered = 0
         for subscription, license_record in subscriptions:
             try:
+                logger.debug(
+                    "Fetching top growers for subscription %s: category=%s days=%s limit=%s min_irating=%s",
+                    subscription.id,
+                    subscription.category,
+                    6,
+                    10,
+                    subscription.min_irating,
+                )
                 data = await get_top_growers(
                     subscription.category,
                     days=6,
                     limit=10,
                     min_current_irating=subscription.min_irating,
+                )
+                logger.debug(
+                    "Fetched top growers for subscription %s: category=%s days=%s limit=%s min_irating=%s",
+                    subscription.id,
+                    subscription.category,
+                    6,
+                    10,
+                    subscription.min_irating,
                 )
                 results = data.get("results", [])
                 start_date_used = data.get("start_date_used")
@@ -110,6 +147,11 @@ async def deliver_discord_subscriptions(
                 snapshot_range = _format_snapshot_range(start_date_used, end_date_used)
                 iracing_week = _iracing_week(_snapshot_end_datetime(end_date_used))
 
+                logger.debug(
+                    "Building Discord payload for subscription %s: results=%s",
+                    subscription.id,
+                    len(results),
+                )
                 embed = {
                     "title": f"Weekly Top iRating Growers – Week  {iracing_week}",
                     "fields": [
@@ -140,7 +182,24 @@ async def deliver_discord_subscriptions(
                     )
 
                 payload = {"embeds": [embed]}
+                logger.debug(
+                    "Built Discord payload for subscription %s: results=%s",
+                    subscription.id,
+                    len(results),
+                )
+                webhook_host = urlparse(subscription.webhook_url).hostname
+                logger.debug(
+                    "Posting Discord webhook for subscription %s: host=%s",
+                    subscription.id,
+                    webhook_host,
+                )
                 response = await client.post(subscription.webhook_url, json=payload)
+                logger.debug(
+                    "Posted Discord webhook for subscription %s: host=%s status=%s",
+                    subscription.id,
+                    webhook_host,
+                    response.status_code,
+                )
                 if response.status_code // 100 != 2:
                     logger.warning(
                         "Discord webhook failed for subscription %s: %s %s",
@@ -157,6 +216,11 @@ async def deliver_discord_subscriptions(
                 )
 
     logger.info("Discord subscription delivery run complete")
+    logger.debug(
+        "Discord subscription delivery run complete: subscription_id=%s total=%s",
+        subscription_id,
+        len(subscriptions),
+    )
     return DiscordDeliveryResult(status="ok", delivered=delivered)
 
 

@@ -82,16 +82,10 @@ def load_snapshot_rows(path: Path) -> Iterator[SnapshotRow]:
             yield normalize_row(row)
 
 
-@lru_cache(maxsize=8)
-def _load_snapshot_map_cached(path: Path, mtime_ns: int) -> Dict[int, SnapshotRow]:
+def load_snapshot_map(path: Path) -> Dict[int, SnapshotRow]:
     result: Dict[int, SnapshotRow] = {}
     for row in load_snapshot_rows(path):
         cust_id = row.get("cust_id")
         if isinstance(cust_id, int):
             result[cust_id] = row
     return result
-
-
-def load_snapshot_map(path: Path) -> Dict[int, SnapshotRow]:
-    """Load snapshot rows into a cust_id map (safe to memoize for immutable snapshots)."""
-    return _load_snapshot_map_cached(path, path.stat().st_mtime_ns)

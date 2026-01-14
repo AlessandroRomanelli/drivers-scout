@@ -273,6 +273,9 @@ def start_scheduler() -> None:
     if not settings.scheduler_enabled:
         logger.info("Scheduler disabled via configuration")
         return
+    if scheduler.running:
+        logger.info("Scheduler already running; skipping reconfiguration")
+        return
     trigger = CronTrigger(
         hour=SCHEDULE_HOURS_EXPRESSION,
         minute=55,
@@ -280,12 +283,15 @@ def start_scheduler() -> None:
     )
     scheduler.add_job(
         scheduled_job,
+        id="sports_formula_fetch_pair",
         trigger=trigger,
         name="sports_formula_fetch_pair",
         misfire_grace_time=None,
+        replace_existing=True,
     )
     scheduler.add_job(
         deliver_discord_subscriptions_guarded,
+        id="deliver_discord_subscriptions",
         trigger=CronTrigger(
             day_of_week="mon",
             hour=23,
@@ -295,6 +301,7 @@ def start_scheduler() -> None:
         name="deliver_discord_subscriptions",
         misfire_grace_time=None,
         max_instances=1,
+        replace_existing=True,
     )
     scheduler.start()
     if scheduler.running:

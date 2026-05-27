@@ -241,6 +241,10 @@ def lookup_members(
     if payload.category is not None and payload.category not in settings.categories_normalized:
         raise HTTPException(status_code=400, detail="Unsupported category")
 
+    # The exact key is computed Python-side (strip+lower) so SQL stays index-
+    # friendly: LOWER(display_name) matches the indexed expression directly.
+    # Stored display_name has no surrounding whitespace (iRacing publishes clean
+    # values); whitespace tolerance lives in fold_name() for the folded path.
     exact_lookup: dict[str, str] = {}
     folded_lookup: dict[str, str] = {}
     for raw in payload.names:
@@ -256,9 +260,14 @@ def lookup_members(
 
     rows: list[tuple[int, str | None, str | None, str | None]] = []
     if exact_keys or folded_keys:
+        # Match the indexed expression `lower(display_name)` exactly — adding a
+        # TRIM wrapper makes SQLite's planner fall back to a full table scan
+        # because LOWER(TRIM(...)) doesn't match the index. iRacing display
+        # names are already clean; whitespace tolerance is preserved via the
+        # folded path (fold_name strips on the input side and on store).
         clauses = []
         if exact_keys:
-            clauses.append(func.lower(func.trim(Member.display_name)).in_(exact_keys))
+            clauses.append(func.lower(Member.display_name).in_(exact_keys))
         if folded_keys:
             clauses.append(Member.display_name_folded.in_(folded_keys))
         result = (
@@ -278,7 +287,7 @@ def lookup_members(
     by_folded: dict[str, list[tuple[int, str | None, str | None]]] = {}
     for cust_id, display_name, location, folded in rows:
         if display_name is not None:
-            exact_key = display_name.strip().lower()
+            exact_key = display_name.lower()
             if exact_key:
                 by_exact.setdefault(exact_key, []).append((cust_id, display_name, location))
         if folded:

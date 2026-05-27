@@ -167,7 +167,34 @@ def init_db() -> None:
 
     logger.info("Creating database tables if they do not exist")
     Base.metadata.create_all(engine)
+    _apply_legacy_migrations()
     _backfill_display_name_folded()
+
+
+def _apply_legacy_migrations() -> None:
+    """Apply schema migrations not handled by Base.metadata.create_all().
+
+    create_all() is table-level idempotent: it does not add columns to
+    existing tables, and it does not create indexes for tables it didn't
+    create. Legacy production databases that predate the display_name_folded
+    column need an explicit ALTER + CREATE INDEX IF NOT EXISTS pass.
+    """
+    from sqlalchemy import inspect
+
+    insp = inspect(engine)
+    if "members" not in insp.get_table_names():
+        return
+
+    existing_cols = {col["name"] for col in insp.get_columns("members")}
+    with engine.begin() as conn:
+        if "display_name_folded" not in existing_cols:
+            logger.info("Migrating legacy members table: adding display_name_folded column")
+            conn.execute(text("ALTER TABLE members ADD COLUMN display_name_folded VARCHAR(255)"))
+
+        # CREATE INDEX IF NOT EXISTS is idempotent — safe to run every startup.
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_members_display_name ON members(display_name)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_members_display_name_lower ON members(lower(display_name))"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_members_display_name_folded ON members(display_name_folded)"))
 
 
 def _backfill_display_name_folded(batch_size: int = 5_000) -> int:

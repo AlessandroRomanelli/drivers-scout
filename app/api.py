@@ -181,7 +181,7 @@ def list_subscriptions(
 
 @router.get("/members/search")
 def search_members(
-    q: str = Query(..., min_length=3, description="Partial member display name"),
+    q: str = Query(..., min_length=3, max_length=64, description="Partial member display name"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: Session = Depends(_get_db_session),
@@ -193,10 +193,13 @@ def search_members(
             detail="Query must be at least 3 characters",
         )
 
+    # Escape ILIKE wildcards so user-supplied %/_ match literally and don't bust the index.
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     query = (
         session.query(Member)
         .filter(Member.display_name.isnot(None))
-        .filter(Member.display_name.ilike(f"%{term}%"))
+        .filter(Member.display_name.ilike(f"%{escaped}%", escape="\\"))
         .order_by(Member.display_name.asc())
         .offset(offset)
         .limit(limit)

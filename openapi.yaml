@@ -201,6 +201,49 @@ components:
           type: string
           nullable: true
       required: [cust_id]
+    MemberLookupRequest:
+      type: object
+      properties:
+        names:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        category:
+          type: string
+          default: sports_car
+          nullable: true
+      required: [names]
+    MemberLookupResolution:
+      type: object
+      properties:
+        query:
+          type: string
+        match_type:
+          type: string
+          enum: [exact, folded]
+          nullable: true
+        cust_id:
+          type: integer
+          nullable: true
+        display_name:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+      required: [query]
+    MemberLookupResponse:
+      type: object
+      properties:
+        resolutions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberLookupResolution'
+      required: [resolutions]
     MemberSearchResponse:
       type: object
       properties:
@@ -596,7 +639,8 @@ paths:
           schema:
             type: string
             minLength: 3
-          description: Partial display name to search for.
+            maxLength: 64
+          description: Partial display name to search for. Wildcards `%` and `_` match literally.
         - in: query
           name: limit
           schema:
@@ -622,7 +666,39 @@ paths:
         '401':
           description: License missing or invalid.
         '422':
-          description: Query too short.
+          description: Query too short, too long, or missing.
+  /members/lookup:
+    post:
+      summary: Bulk resolve driver names to cust_ids
+      description: |
+        Resolves up to 500 driver display names in a single request. For each
+        input name the resolver tries an exact match (case + whitespace
+        insensitive) first, then a diacritics-folded match (NFD-strip).
+        Ambiguous matches (multiple rows match a key) return `match_type: null`.
+        Designed to replace 200-fan-out `/members/search` calls used for roster
+        resolution.
+      security:
+        - LicenseKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberLookupRequest'
+      responses:
+        '200':
+          description: Per-name resolution results, returned in the same order as the input.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberLookupResponse'
+        '400':
+          description: Unsupported category.
+        '401':
+          description: License missing or invalid.
+        '422':
+          description: Invalid request body (empty names, over 500 names, or per-name length out of range).
   /members/{cust_id}/delta:
     get:
       summary: iRating delta for a member

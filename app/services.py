@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -30,6 +31,20 @@ from .snapshots import (
 from .settings import settings
 
 logger = logging.getLogger(__name__)
+
+
+def fold_name(value: str | None) -> str | None:
+    """Diacritics-insensitive lowercase trim. Mirrors 24h-series-esports-website fold().
+
+    NFD-normalize → strip Unicode combining marks → lowercase → strip whitespace.
+    Returns None for None or empty-after-fold input.
+    """
+    if value is None:
+        return None
+    normalized = unicodedata.normalize("NFD", value)
+    stripped = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    folded = stripped.lower().strip()
+    return folded or None
 
 
 _top_growers_cache: dict[
@@ -70,10 +85,12 @@ def sync_members_from_snapshots() -> int:
             cust_id = row.get("cust_id")
             if not isinstance(cust_id, int):
                 continue
+            display_name = row.get("display_name")
             members[cust_id] = {
                 "cust_id": cust_id,
-                "display_name": row.get("display_name"),
+                "display_name": display_name,
                 "location":  row.get("location"),
+                "display_name_folded": fold_name(display_name if isinstance(display_name, str) else None),
             }
 
     with get_session() as session:
@@ -84,7 +101,8 @@ def sync_members_from_snapshots() -> int:
                 CREATE TEMPORARY TABLE member_staging (
                     cust_id INTEGER PRIMARY KEY,
                     display_name TEXT,
-                    location TEXT
+                    location TEXT,
+                    display_name_folded TEXT
                 )
                 """
             )
@@ -94,8 +112,8 @@ def sync_members_from_snapshots() -> int:
             session.execute(
                 text(
                     """
-                    INSERT INTO member_staging (cust_id, display_name, location)
-                    VALUES (:cust_id, :display_name, :location)
+                    INSERT INTO member_staging (cust_id, display_name, location, display_name_folded)
+                    VALUES (:cust_id, :display_name, :location, :display_name_folded)
                     """
                 ),
                 member_values,
@@ -104,8 +122,8 @@ def sync_members_from_snapshots() -> int:
         session.execute(
             text(
                 """
-                 INSERT OR IGNORE INTO members (cust_id, display_name, location)
-                        SELECT cust_id, display_name, location
+                 INSERT OR IGNORE INTO members (cust_id, display_name, location, display_name_folded)
+                        SELECT cust_id, display_name, location, display_name_folded
                         FROM member_staging;
                 """
             )
@@ -149,6 +167,50 @@ def init_db() -> None:
 
     logger.info("Creating database tables if they do not exist")
     Base.metadata.create_all(engine)
+    _backfill_display_name_folded()
+
+
+def _backfill_display_name_folded(batch_size: int = 5_000) -> int:
+    """Populate Member.display_name_folded for rows where it is still NULL.
+
+    SQLite cannot compute the NFD strip in SQL, so we stream NULL rows in
+    batches and update each row. Runs once at startup; a no-op after the first
+    full pass. Returns the number of rows updated.
+    """
+    total = 0
+    with get_session() as session:
+        while True:
+            rows = session.execute(
+                text(
+                    """
+                    SELECT cust_id, display_name
+                    FROM members
+                    WHERE display_name_folded IS NULL AND display_name IS NOT NULL
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": batch_size},
+            ).all()
+            if not rows:
+                break
+            updates = [
+                {"cust_id": cust_id, "folded": fold_name(display_name)}
+                for cust_id, display_name in rows
+            ]
+            session.execute(
+                text(
+                    "UPDATE members SET display_name_folded = :folded WHERE cust_id = :cust_id"
+                ),
+                updates,
+            )
+            session.commit()
+            total += len(rows)
+            logger.info("Backfilled display_name_folded for %s members (running total %s)", len(rows), total)
+            if len(rows) < batch_size:
+                break
+    if total:
+        logger.info("Backfill complete: %s members folded", total)
+    return total
 
 
 async def _download_snapshot(category: str, snapshot_date: date, client: IRacingClient) -> Path:

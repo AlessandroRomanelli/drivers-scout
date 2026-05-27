@@ -3,15 +3,20 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
     """Base class for ORM models."""
 
+    # server_default ensures raw INSERTs (e.g. the staging-table path in
+    # sync_members_from_snapshots) populate the column without silently
+    # dropping the row to the NOT NULL constraint.
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.current_timestamp(),
     )
 
 
@@ -23,6 +28,12 @@ class Member(Base):
     cust_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     display_name: Mapped[str | None] = mapped_column(String(255))
     location: Mapped[str | None] = mapped_column(String(255))
+    display_name_folded: Mapped[str | None] = mapped_column(String(255), index=True)
+
+    __table_args__ = (
+        Index("ix_members_display_name", "display_name"),
+        Index("ix_members_display_name_lower", text("lower(display_name)")),
+    )
 
 
 class License(Base):

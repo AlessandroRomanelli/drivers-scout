@@ -17,10 +17,17 @@ from .license_repository import (
     list_licenses,
     revoke_license,
 )
-from .schemas import SubscriptionCreate, SubscriptionResponse
+from .schemas import (
+    MemberLookupRequest,
+    MemberLookupResolution,
+    MemberLookupResponse,
+    SubscriptionCreate,
+    SubscriptionResponse,
+)
 from .scheduler import deliver_discord_subscriptions_guarded
 from .services import (
     fetch_and_store,
+    fold_name,
     get_irating_delta,
     get_latest_snapshot,
     get_latest_snapshots,
@@ -28,6 +35,7 @@ from .services import (
     sync_members_from_snapshots_async,
 )
 from .settings import settings
+from sqlalchemy import func, or_
 
 public_router = APIRouter()
 router = APIRouter(dependencies=[Depends(require_license)])
@@ -181,7 +189,7 @@ def list_subscriptions(
 
 @router.get("/members/search")
 def search_members(
-    q: str = Query(..., min_length=3, description="Partial member display name"),
+    q: str = Query(..., min_length=3, max_length=64, description="Partial member display name"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: Session = Depends(_get_db_session),
@@ -193,10 +201,13 @@ def search_members(
             detail="Query must be at least 3 characters",
         )
 
+    # Escape ILIKE wildcards so user-supplied %/_ match literally and don't bust the index.
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     query = (
         session.query(Member)
         .filter(Member.display_name.isnot(None))
-        .filter(Member.display_name.ilike(f"%{term}%"))
+        .filter(Member.display_name.ilike(f"%{escaped}%", escape="\\"))
         .order_by(Member.display_name.asc())
         .offset(offset)
         .limit(limit)
@@ -212,6 +223,108 @@ def search_members(
     ]
 
     return {"query": term, "limit": limit, "offset": offset, "results": results}
+
+
+@router.post("/members/lookup", response_model=MemberLookupResponse)
+def lookup_members(
+    payload: MemberLookupRequest,
+    session: Session = Depends(_get_db_session),
+) -> MemberLookupResponse:
+    """Resolve a batch of driver display names to cust_ids.
+
+    For each input name the resolver tries:
+      1. exact match — case + whitespace insensitive (LOWER(TRIM(display_name)))
+      2. diacritics-folded match — display_name_folded equality
+    A unique exact match wins over a unique folded match. Ambiguous matches
+    (multiple rows share the same exact or folded key) return match_type=None.
+    """
+    if payload.category is not None and payload.category not in settings.categories_normalized:
+        raise HTTPException(status_code=400, detail="Unsupported category")
+
+    exact_lookup: dict[str, str] = {}
+    folded_lookup: dict[str, str] = {}
+    for raw in payload.names:
+        exact_key = raw.strip().lower()
+        if exact_key:
+            exact_lookup[exact_key] = raw
+        folded_key = fold_name(raw)
+        if folded_key:
+            folded_lookup[folded_key] = raw
+
+    exact_keys = list(exact_lookup.keys())
+    folded_keys = list(folded_lookup.keys())
+
+    rows: list[tuple[int, str | None, str | None, str | None]] = []
+    if exact_keys or folded_keys:
+        clauses = []
+        if exact_keys:
+            clauses.append(func.lower(func.trim(Member.display_name)).in_(exact_keys))
+        if folded_keys:
+            clauses.append(Member.display_name_folded.in_(folded_keys))
+        result = (
+            session.query(
+                Member.cust_id,
+                Member.display_name,
+                Member.location,
+                Member.display_name_folded,
+            )
+            .filter(or_(*clauses))
+            .all()
+        )
+        rows = [(r[0], r[1], r[2], r[3]) for r in result]
+
+    # Bucket rows by exact key and folded key.
+    by_exact: dict[str, list[tuple[int, str | None, str | None]]] = {}
+    by_folded: dict[str, list[tuple[int, str | None, str | None]]] = {}
+    for cust_id, display_name, location, folded in rows:
+        if display_name is not None:
+            exact_key = display_name.strip().lower()
+            if exact_key:
+                by_exact.setdefault(exact_key, []).append((cust_id, display_name, location))
+        if folded:
+            by_folded.setdefault(folded, []).append((cust_id, display_name, location))
+
+    resolutions: list[MemberLookupResolution] = []
+    for raw in payload.names:
+        exact_key = raw.strip().lower()
+        folded_key = fold_name(raw)
+
+        exact_hits = by_exact.get(exact_key) if exact_key else None
+        if exact_hits and len(exact_hits) == 1:
+            cust_id, display_name, location = exact_hits[0]
+            resolutions.append(
+                MemberLookupResolution(
+                    query=raw,
+                    match_type="exact",
+                    cust_id=cust_id,
+                    display_name=display_name,
+                    location=location,
+                )
+            )
+            continue
+
+        if exact_hits and len(exact_hits) > 1:
+            # Ambiguous exact match — refuse to guess.
+            resolutions.append(MemberLookupResolution(query=raw))
+            continue
+
+        folded_hits = by_folded.get(folded_key) if folded_key else None
+        if folded_hits and len(folded_hits) == 1:
+            cust_id, display_name, location = folded_hits[0]
+            resolutions.append(
+                MemberLookupResolution(
+                    query=raw,
+                    match_type="folded",
+                    cust_id=cust_id,
+                    display_name=display_name,
+                    location=location,
+                )
+            )
+            continue
+
+        resolutions.append(MemberLookupResolution(query=raw))
+
+    return MemberLookupResponse(resolutions=resolutions)
 
 
 @router.get("/members/{cust_id}/latest")

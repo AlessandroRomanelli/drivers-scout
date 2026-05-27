@@ -23,6 +23,7 @@ class Member(Base):
     cust_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     display_name: Mapped[str | None] = mapped_column(String(255))
     location: Mapped[str | None] = mapped_column(String(255))
+    display_name_folded: Mapped[str | None] = mapped_column(String(255), index=True)
 
     __table_args__ = (
         Index("ix_members_display_name", "display_name"),

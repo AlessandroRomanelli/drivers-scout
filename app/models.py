@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -23,6 +23,11 @@ class Member(Base):
     cust_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     display_name: Mapped[str | None] = mapped_column(String(255))
     location: Mapped[str | None] = mapped_column(String(255))
+
+    __table_args__ = (
+        Index("ix_members_display_name", "display_name"),
+        Index("ix_members_display_name_lower", text("lower(display_name)")),
+    )
 
 
 class License(Base):

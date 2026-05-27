@@ -39,6 +39,17 @@ class Settings(BaseSettings):
 
     http_timeout_seconds: float = Field(15.0, description="HTTP client timeout")
     rate_limit_burst: int = Field(5, description="Burst size for rate limiting")
+    snapshot_map_cache_size: int = Field(
+        4,
+        ge=1,
+        le=64,
+        description=(
+            "Max number of snapshot pickle maps held in memory by"
+            " load_snapshot_map_cached. Each entry is roughly 25-30 MB at"
+            " current roster size; default 4 covers today+yesterday across"
+            " sports_car and formula_car."
+        ),
+    )
 
     database_url: str = Field(
         "sqlite:///./iracing_stats.db", description="SQLAlchemy database URL"

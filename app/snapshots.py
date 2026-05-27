@@ -6,6 +6,7 @@ import io
 import logging
 import pickle
 from datetime import date, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Iterator, Tuple
 
@@ -159,6 +160,11 @@ def load_snapshot_map(path: Path) -> Dict[int, SnapshotRow]:
     return result
 
 
+# Bounded LRU keyed by (path, mtime). When a new snapshot is written the
+# caller computes a fresh mtime, so the stale entry is bypassed and will be
+# evicted naturally once maxsize is exceeded. Sized to hold today+yesterday
+# across the configured categories at current ~411k-row scale (~27 MB each).
+@lru_cache(maxsize=settings.snapshot_map_cache_size)
 def _load_snapshot_map_binary(path: str, mtime: float) -> Dict[int, SnapshotRow]:
     with Path(path).open("rb") as handle:
         return pickle.load(handle)

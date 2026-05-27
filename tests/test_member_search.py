@@ -71,6 +71,51 @@ class MemberSearchTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["results"], [])
 
+    def test_query_over_64_chars_rejected(self) -> None:
+        response = self.client.get(
+            "/members/search", params={"q": "a" * 65}
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_query_exactly_64_chars_accepted(self) -> None:
+        response = self.client.get(
+            "/members/search", params={"q": "a" * 64}
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_percent_in_query_matches_literally(self) -> None:
+        with get_session() as session:
+            session.query(Member).delete()
+            session.add_all(
+                [
+                    Member(cust_id=20, display_name="Foo%Bar", location="X"),
+                    Member(cust_id=21, display_name="FooBar", location="Y"),
+                    Member(cust_id=22, display_name="FooXBar", location="Z"),
+                ]
+            )
+
+        response = self.client.get("/members/search", params={"q": "Foo%Bar"})
+
+        self.assertEqual(response.status_code, 200)
+        ids = {item["cust_id"] for item in response.json()["results"]}
+        self.assertSetEqual(ids, {20})
+
+    def test_underscore_in_query_matches_literally(self) -> None:
+        with get_session() as session:
+            session.query(Member).delete()
+            session.add_all(
+                [
+                    Member(cust_id=30, display_name="foo_bar", location="X"),
+                    Member(cust_id=31, display_name="fooXbar", location="Y"),
+                ]
+            )
+
+        response = self.client.get("/members/search", params={"q": "foo_bar"})
+
+        self.assertEqual(response.status_code, 200)
+        ids = {item["cust_id"] for item in response.json()["results"]}
+        self.assertSetEqual(ids, {30})
+
 
 if __name__ == "__main__":
     unittest.main()

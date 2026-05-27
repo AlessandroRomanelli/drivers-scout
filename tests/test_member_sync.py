@@ -67,6 +67,24 @@ class MemberSyncTests(unittest.TestCase):
             members = session.query(Member).all()
             self.assertEqual(len(members), 3)
 
+    def test_sync_populates_display_name_folded(self) -> None:
+        self._write_snapshot("sports_car", date(2024, 1, 5), [
+            ["CUSTID", "DRIVER", "LOCATION", "IRATING", "STARTS", "WINS"],
+            ["100", "Müller", "DE", "1500", "0", "0"],
+            ["101", "  Dáníel Oláh  ", "HU", "1400", "0", "0"],
+        ])
+
+        sync_members_from_snapshots()
+
+        with get_session() as session:
+            mueller = session.get(Member, 100)
+            self.assertIsNotNone(mueller)
+            self.assertEqual(mueller.display_name_folded, "muller")
+
+            daniel = session.get(Member, 101)
+            self.assertIsNotNone(daniel)
+            self.assertEqual(daniel.display_name_folded, "daniel olah")
+
 
 if __name__ == "__main__":
     unittest.main()
